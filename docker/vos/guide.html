@@ -15,7 +15,7 @@
   <p class="muted">用同一个 VOS 身份连接代码仓库、脚本和应用。</p>
   <h2>地址与身份</h2>
   <table><tr><th>用途</th><th>地址</th></tr><tr><td>浏览器 API</td><td><code>/app/com.ictrek.gitea/api/v1</code></td></tr><tr><td>同机应用</td><td><code>http://gitea:8080/app/com.ictrek.gitea/api/v1</code></td></tr><tr><td>交互式 API 文档</td><td><a href="/app/com.ictrek.gitea/api/swagger">Swagger</a></td></tr></table>
-  <p>从 VOS 打开应用后自动登录。首次访问创建独立 Gitea 账户，之后按 VOS 的稳定用户 ID 同步显示名、管理员角色与语言；VOS 中改名不会改变仓库归属。普通用户仅能访问自己或被授权的仓库，系统管理员拥有 Gitea 管理权限。</p>
+  <p>从 VOS 打开应用后自动登录。首次访问优先使用 VOS 用户名创建独立 Gitea 账户。旧版自动生成的用户名会在下次登录时迁移到可用的用户名，仓库和凭据继续保留；请按仓库页面更新克隆地址。之后按 VOS 的稳定用户 ID 同步显示名、管理员角色与语言；VOS 中改名不会改变仓库归属。普通用户仅能访问自己或被授权的仓库，系统管理员拥有 Gitea 管理权限。</p>
   <h2>调用 API</h2>
   <p>外部客户端可以使用原生 Gitea PAT，或使用 VOS 为 <code>com.ictrek.gitea</code> 签发的用户 access token。通过 VOS OAuth2 authorization code + PKCE 获取，令牌到期后按 VOS OAuth2 流程刷新。浏览器插件可调用 <code>window.vos_platform.api.v1000.oauth2.authorize()</code> 和 <code>token()</code>，并校验 state。不要将令牌写入仓库或日志。</p>
   <pre>export GITEA_URL='https://&lt;VOS地址&gt;:1180/app/com.ictrek.gitea'
@@ -67,7 +67,7 @@ jobs:
   <h1>API integration guide</h1><p class="muted">Connect repositories, scripts and applications using your VOS identity.</p>
   <h2>Endpoints and identity</h2>
   <p>Browser API: <code>/app/com.ictrek.gitea/api/v1</code><br>Same-host applications: <code>http://gitea:8080/app/com.ictrek.gitea/api/v1</code><br><a href="/app/com.ictrek.gitea/api/swagger">Interactive Swagger documentation</a></p>
-  <p>Opening Gitea in VOS signs you in and provisions an independent account on first access. Your stable VOS subject owns the account; display name, language and administrator role synchronize on access. Renaming your VOS account preserves repository ownership. Repositories are private by default.</p>
+  <p>Opening Gitea in VOS signs you in and provisions an independent account on first access, using your VOS username when available. Accounts with legacy generated handles move to an available username on their next sign-in. Repositories and credentials stay with the account; update clone URLs from the repository page. Your stable VOS subject owns the account; display name, language and administrator role synchronize on access. Renaming your VOS account preserves repository ownership. Repositories are private by default.</p>
   <h2>API requests</h2>
   <p>Use a native Gitea personal access token (PAT), or a VOS user access token for <code>com.ictrek.gitea</code>, obtained through authorization code + PKCE. Browser integrations can use <code>window.vos_platform.api.v1000.oauth2.authorize()</code> and <code>token()</code>, validating state. Refresh expired tokens using the VOS OAuth2 flow. Keep credentials out of source control and logs.</p>
   <pre>export GITEA_URL='https://&lt;VOS-HOST&gt;:1180/app/com.ictrek.gitea'

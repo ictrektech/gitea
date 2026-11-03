@@ -108,18 +108,21 @@ func (r *ReverseProxy) getUserFromAuthEmail(req *http.Request) *user_model.User 
 // and failing that it will attempt to load it based on the email (see docs for getUserFromAuthEmail).
 // Returns nil if the headers are empty or the user is not found.
 func (r *ReverseProxy) Verify(req *http.Request, w http.ResponseWriter, store DataStore, sess SessionStore) (*user_model.User, error) {
-	user, err := r.getUserFromAuthUser(req)
+	var user *user_model.User
+	var err error
+	if isVOSProxyRequest(req) {
+		user, err = r.getVOSUser(req)
+	} else {
+		user, err = r.getUserFromAuthUser(req)
+		if err == nil && user == nil {
+			user = r.getUserFromAuthEmail(req)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
-	if user == nil {
-		user = r.getUserFromAuthEmail(req)
-	}
 	if user == nil || !user.IsIndividual() {
 		return nil, nil //nolint:nilnil // the auth method is not applicable
-	}
-	if err := syncVOSUser(req, user); err != nil {
-		return nil, err
 	}
 
 	if r.CreateSession && sess != nil {

@@ -48,6 +48,18 @@ func RenameUser(ctx context.Context, u *user_model.User, newUserName string, doe
 		return user_model.ErrUserIsNotLocal{UID: u.ID, Name: u.Name}
 	}
 
+	return renameUser(ctx, u, newUserName)
+}
+
+// RenameVOSUser migrates a VOS-bound account without changing its identity.
+func RenameVOSUser(ctx context.Context, u *user_model.User, newUserName string) error {
+	if !user_model.IsVOSUser(u) {
+		return user_model.ErrUserIsNotLocal{UID: u.ID, Name: u.Name}
+	}
+	return renameUser(ctx, u, newUserName)
+}
+
+func renameUser(ctx context.Context, u *user_model.User, newUserName string) error {
 	if err := user_model.IsUsableUsername(newUserName); err != nil {
 		return err
 	}

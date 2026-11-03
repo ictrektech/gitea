@@ -17,7 +17,7 @@ export async function verify(token, userinfoUrl, fetcher = fetch) {
   if (data.code !== undefined && data.code !== 0) throw Error('Invalid token');
   const claims = data.data || data;
   if (typeof claims.sub !== 'string' || !claims.sub || ![true, 1].includes(claims.enable)) throw Error('Disabled or invalid user');
-  return {subject: claims.sub, username: username(claims.sub), name: String(claims.nickname || claims.preferred_username || 'VOS user').slice(0, 100), admin: claims.role_code === 'system_admin'};
+  return {subject: claims.sub, username: username(claims.sub), preferredUsername: typeof claims.preferred_username === 'string' ? claims.preferred_username.slice(0, 100) : '', name: String(claims.nickname || claims.preferred_username || 'VOS user').slice(0, 100), admin: claims.role_code === 'system_admin'};
 }
 
 function respond(res, code, body = '', type = 'text/plain; charset=utf-8') {
@@ -39,7 +39,7 @@ export function upstreamHeaders(req, user, locale) {
   }
   return {...headers, host: req.headers.host, 'x-forwarded-proto': req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http',
     'x-webauth-user': user.username, 'x-webauth-email': `${user.username}@vos.invalid`, 'x-vos-subject': user.subject,
-    'x-vos-display-name': encodeURIComponent(user.name), 'x-vos-admin': String(user.admin), 'x-vos-language': locale || ''};
+    'x-vos-username': encodeURIComponent(user.preferredUsername || ''), 'x-vos-display-name': encodeURIComponent(user.name), 'x-vos-admin': String(user.admin), 'x-vos-language': locale || ''};
 }
 export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', fetcher = fetch}) {
   const sessions = new Map();

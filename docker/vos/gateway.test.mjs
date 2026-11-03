@@ -45,10 +45,11 @@ test('browser bridge validates OAuth state and follows VOS locale and account ch
 });
 
 test('client identity headers are replaced and authorization never reaches Gitea', () => {
-  const h = upstreamHeaders({headers: {host: 'vos.test', authorization: 'Bearer secret', 'x-webauth-user': 'admin', 'x-vos-admin': 'true', 'x-forwarded-for': 'spoof'}}, {username: 'vos-real', subject: 'real', name: '中文', admin: false}, 'zh-CN');
+  const h = upstreamHeaders({headers: {host: 'vos.test', authorization: 'Bearer secret', 'x-webauth-user': 'admin', 'x-vos-admin': 'true', 'x-vos-username': 'forged', 'x-forwarded-for': 'spoof'}}, {username: 'vos-real', subject: 'real', preferredUsername: 'alice', name: '中文', admin: false}, 'zh-CN');
   assert.equal(h['x-webauth-user'], 'vos-real'); assert.equal(h['x-vos-admin'], 'false');
   assert.equal(h.authorization, undefined); assert.equal(h['x-forwarded-for'], undefined);
   assert.equal(decodeURIComponent(h['x-vos-display-name']), '中文');
+  assert.equal(h['x-vos-username'], 'alice');
 });
 
 test('gateway isolates accounts, validates machine access, rejects CSRF and revokes sessions', async t => {

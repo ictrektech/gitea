@@ -108,13 +108,17 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
 
         ready()
         assert request(base, '/api/v1/user')[0] == 401
+        request(info_host, '/control', payload={'alice': {'preferred_username': ''}, 'bob': {'preferred_username': 'admin'}})
         identities = {}
-        for token in ['alice', 'bob', 'admin']:
+        for token in ['alice', 'admin', 'bob']:
             code, data, _ = request(base, '/api/v1/user', token)
             assert code == 200, (token, code, data[:200])
             identities[token] = json.loads(data)
             assert identities[token]['is_admin'] == (token == 'admin')
         assert len({u['id'] for u in identities.values()}) == 3
+        assert identities['admin']['login'] == 'admin'
+        assert identities['bob']['login'].startswith('admin-')
+        assert identities['alice']['login'].startswith('vos-')
         code, data, _ = request(base, '/user/sign_up', 'alice')
         assert code == 403
         code, data, headers = request(base, '/vos/login', payload={'access_token': 'alice', 'locale': 'zh-CN'}, origin=host)
@@ -140,6 +144,13 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         assert renamed['id'] == identities['alice']['id'] and renamed['full_name'] == 'Renamed VOS user'
         native_pat = docker('exec', '--user', 'node', app, '/usr/local/bin/gitea', '--work-path', '/data/gitea', '--custom-path', '/config', '--config', '/config/conf/app.ini', 'admin', 'user', 'generate-access-token', '--username', owner, '--token-name', 'native-proof', '--scopes', 'all', '--raw').splitlines()[-1]
         assert request(base, '/api/v1/user', native=native_pat)[0] == 200
+        request(info_host, '/control', payload={'alice': {'enable': 1, 'preferred_username': 'alice'}})
+        code, data, _ = request(base, '/api/v1/user', 'alice')
+        assert code == 200 and json.loads(data)['login'] == 'alice' and json.loads(data)['id'] == identities['alice']['id']
+        owner = 'alice'
+        path = f'/api/v1/repos/{owner}/vos-private-proof'
+        assert request(base, path, native=native_pat)[0] == 200
+        assert (storage / 'data/git/repositories/alice/vos-private-proof.git').is_dir()
         request(info_host, '/control', payload={'alice': {'enable': 0}})
         assert request(base, '/api/v1/user', 'alice')[0] == 401
         assert request(base, '/api/v1/user', native=native_pat)[0] == 401
