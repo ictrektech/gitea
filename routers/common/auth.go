@@ -24,6 +24,11 @@ func AuthShared(ctx *context.Base, sessionStore auth_service.SessionStore, authM
 		return ar, err
 	}
 	if ar.Doer != nil {
+		if ctx.Data["IsReverseProxy"] != true {
+			if err := auth_service.ValidateVOSUser(ctx, ar.Doer); err != nil {
+				return ar, err
+			}
+		}
 		if ctx.Locale.Language() != ar.Doer.Language {
 			ctx.Locale = middleware.Locale(ctx.Resp, ctx.Req)
 		}

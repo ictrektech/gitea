@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -662,7 +663,7 @@ func ComposeCLICloneCommand(ctx context.Context, owner, repo string) string {
 }
 
 func (repo *Repository) cloneLink(ctx context.Context, doer *user_model.User, repoPathName string) *CloneLink {
-	return &CloneLink{
+	link := &CloneLink{
 		IsWikiRepo:   strings.HasSuffix(repoPathName, ".wiki"),
 		SupportHTTPS: !setting.Repository.DisableHTTPGit,
 		SupportSSH:   !setting.SSH.Disabled && (doer != nil || setting.SSH.ExposeAnonymous),
@@ -670,6 +671,12 @@ func (repo *Repository) cloneLink(ctx context.Context, doer *user_model.User, re
 		HTTPS:        ComposeHTTPSCloneURL(ctx, repo.OwnerName, repoPathName),
 		CLI:          ComposeCLICloneCommand(ctx, repo.OwnerName, repoPathName),
 	}
+	if os.Getenv("VOS_AUTH_ENABLED") == "true" && os.Getenv("GITEA_SSH_DOMAIN") == "" {
+		if public, err := url.Parse(httplib.GuessCurrentHostURL(ctx)); err == nil && public.Hostname() != "" {
+			link.SSH = fmt.Sprintf("ssh://%s@%s/%s/%s.git", setting.SSH.User, net.JoinHostPort(public.Hostname(), strconv.Itoa(setting.SSH.Port)), url.PathEscape(repo.OwnerName), url.PathEscape(repoPathName))
+		}
+	}
+	return link
 }
 
 // CloneLink returns clone URLs of repository.

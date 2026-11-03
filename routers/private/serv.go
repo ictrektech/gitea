@@ -20,6 +20,7 @@ import (
 	"gitea.dev/modules/private"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/util"
+	auth_service "gitea.dev/services/auth"
 	"gitea.dev/services/context"
 	repo_service "gitea.dev/services/repository"
 	wiki_service "gitea.dev/services/wiki"
@@ -53,6 +54,10 @@ func ServNoCommand(ctx *context.PrivateContext) {
 				return
 			}
 			ctx.PrivateInternalErrorf("Unable to get owner with id: %d for public key: %d Error: %v", key.OwnerID, keyID, err)
+			return
+		}
+		if err := auth_service.ValidateVOSUser(ctx, user); err != nil {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "VOS account verification failed.")
 			return
 		}
 		if !user.IsActive || user.ProhibitLogin {
@@ -148,6 +153,10 @@ func ServCommand(ctx *context.PrivateContext) {
 		}
 	}
 
+	if err := auth_service.ValidateVOSUser(ctx, owner); err != nil {
+		ctx.PrivateUserErrorf(http.StatusForbidden, "VOS repository owner verification failed.")
+		return
+	}
 	if !owner.IsOrganization() && !owner.IsActive {
 		ctx.PrivateUserErrorf(http.StatusForbidden, "Repository cannot be accessed, the owner is inactive.")
 		return
@@ -213,6 +222,10 @@ func ServCommand(ctx *context.PrivateContext) {
 				return
 			}
 			ctx.PrivateInternalErrorf("Unable to get key owner %d for public key %d:%s, error: %v", key.OwnerID, key.ID, key.Name, err)
+			return
+		}
+		if err := auth_service.ValidateVOSUser(ctx, user); err != nil {
+			ctx.PrivateUserErrorf(http.StatusForbidden, "VOS account verification failed.")
 			return
 		}
 		if !user.IsActive || user.ProhibitLogin {

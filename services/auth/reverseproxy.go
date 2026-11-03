@@ -118,6 +118,9 @@ func (r *ReverseProxy) Verify(req *http.Request, w http.ResponseWriter, store Da
 	if user == nil || !user.IsIndividual() {
 		return nil, nil //nolint:nilnil // the auth method is not applicable
 	}
+	if err := syncVOSUser(req, user); err != nil {
+		return nil, err
+	}
 
 	if r.CreateSession && sess != nil {
 		sessionUID, ok := sess.Get(session.KeyUID).(int64)

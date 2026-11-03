@@ -1,0 +1,38 @@
+configs:
+  - name: GITEA_DATA_PATH
+    type: path
+    title:
+      zh-CN: Gitea 数据目录
+      en: Gitea Data Directory
+    description:
+      zh-CN: 选择 VOS 公共目录或宿主机路径，保存 Git 仓库、附件和 LFS。账户及仓库元数据保存在 PGV 独立数据库；请限制数据目录的 NAS 授权。
+      en: Select a VOS public directory or host path for repositories, attachments and LFS. Metadata uses a dedicated PGV database; restrict direct NAS access to the data directory.
+    default: /data/vos_workspace/gitea
+    hints: [com.ictrek.gitea.data]
+  - name: GITEA_SSH_PORT
+    type: integer
+    title:
+      zh-CN: Git SSH 端口
+      en: Git SSH Port
+    description:
+      zh-CN: 宿主机用于 Git SSH 克隆和推送的端口，与宿主机管理 SSH 分离。
+      en: Host port for Git SSH clone and push, separate from host administration SSH.
+    default: 2222
+  - name: GITEA_SSH_DOMAIN
+    type: string
+    title:
+      zh-CN: Git SSH 地址
+      en: Git SSH Host
+    description:
+      zh-CN: 可留空，页面按当前 VOS 访问地址生成 SSH clone URL；使用外部域名或 NAT 时可指定地址，不包含协议和端口。
+      en: Leave empty to use the current VOS browser hostname in clone URLs; set a public hostname for external access or NAT, without scheme or port.
+    default: ""
+  - name: GITEA_PUBLIC_URL
+    type: string
+    title:
+      zh-CN: Gitea 对外访问地址
+      en: Gitea Public URL
+    description:
+      zh-CN: Actions checkout、任务 API 和 Webhook 使用的标准地址。外部 Runner 请填写设备可达地址，例如 https://设备IP:1180/app/com.ictrek.gitea/；默认值适合同一 VOS 网络的服务。
+      en: Canonical URL for Actions checkout, job APIs and webhooks. External runners need a reachable device URL such as https://HOST:1180/app/com.ictrek.gitea/; the default is for the same VOS network.
+    default: http://gitea:8080/app/com.ictrek.gitea/

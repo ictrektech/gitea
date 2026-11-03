@@ -20,3 +20,12 @@
 - Run single tests with `go test -run '^TestName$' ./modulepath/` for Go, `pnpm exec vitest <path-filter>` for TS and `GITEA_TEST_E2E_FLAGS='<filepath>' make test-e2e` for e2e
 - Write the fewest, fastest tests covering the behavior, extending an existing one where possible. Prefer unit tests where logic is testable in isolation
 - Aim for sub-2s per integration test and sub-4s per e2e test. Wait on a deterministic condition rather than `sleep`, and prefer semantic locators in e2e tests
+
+
+## VOS fork maintenance
+
+- Before changing this fork, read `README.md` for the VOS identity, storage and release contract. `UPSTREAM` is the canonical fork source.
+- At the start of code-update work, fetch the upstream source locally and review changes since the last merge. During active maintenance, check upstream at least weekly. Add the `upstream` remote from `UPSTREAM` if absent; preserve `origin` as the ICTrek fork.
+- Merge applicable upstream updates into the fork's `main` branch with a normal merge. Preserve VOS authentication, user/role synchronization, public-directory mapping, PGV persistence, locale synchronization, native PAT/SSH/Actions and the two sibling VOS pages. Resolve conflicts in source and rerun the focused gateway and image runtime checks before pushing.
+- After an upstream version change, verify its version/tag ancestry and update `ictrek.app/UPSTREAM_VERSION` and the VOS version base together. Images use `<upstream>-<short-source-commit>-<architecture>`; VOS revisions use `<upstream>.vos.<revision>`. Keep image source commits distinct from packaging-only release commits.
+- All Git operations run locally. Sync source with rsync before remote builds/tests; run them under the build host's `~/dev/build/gitea`. Reuse `build_image.sh` and `ictrek.app/scripts/update_version.sh`; verify registry push, Feishu read-back, GitHub Release and App Store publication separately.

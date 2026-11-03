@@ -1,0 +1,40 @@
+id: com.ictrek.gitea
+name:
+  zh-CN: Gitea
+  en: Gitea
+description:
+  zh-CN: 轻量代码托管、仓库管理、代码评审与 API，使用 VOS 账户登录并同步身份和语言。
+  en: Lightweight Git hosting, repositories, code review and APIs with VOS identity and language synchronization.
+version: __APP_VERSION__
+author: ictrek
+category: [productivity]
+icon: icon.png
+arch: [amd64, arm64]
+frontend:
+  enabled: true
+  basePath: /app/com.ictrek.gitea
+platform:
+  version: ">=3.0.0"
+dependencies:
+  apps:
+    - id: com.ictrek.pgv
+      version: latest
+      optional: false
+profiles:
+  - name: amd
+    title: AMD64
+    caps:
+      arch: amd64
+    conflicts: [arm]
+  - name: arm
+    title: ARM64
+    caps:
+      arch: arm64
+    conflicts: [amd]
+require-profiles: true
+storage:
+  directories:
+    - path: config
+      mode: "0700"
+oauth2:
+  client: {}

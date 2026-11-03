@@ -1,0 +1,23 @@
+router-type: structured
+routers:
+  - id: gitea
+    kind: page
+    title:
+      zh-CN: 代码管理
+      en: Code Management
+    icon: lucide:git-branch
+    order: 200
+    iframe-src: /app/com.ictrek.gitea/
+    keep-alive: true
+    entry-point: true
+    embed: true
+  - id: gitea-guide
+    kind: page
+    title:
+      zh-CN: API 接入指南
+      en: API Integration Guide
+    icon: lucide:book-open
+    order: 210
+    iframe-src: /app/com.ictrek.gitea/integration-guide
+    keep-alive: true
+    embed: true

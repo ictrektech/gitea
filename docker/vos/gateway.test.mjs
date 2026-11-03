@@ -1,0 +1,87 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import {once} from 'node:events';
+import {readFile} from 'node:fs/promises';
+import {webcrypto} from 'node:crypto';
+import vm from 'node:vm';
+import {createGateway, BASE, verify, username, upstreamHeaders} from './gateway.mjs';
+
+test('verified VOS identity is stable across renames and rejects disabled users', async () => {
+  let claims = {sub: 'account-1', preferred_username: 'alice', enable: 1, role_code: 'user'};
+  const mock = async () => ({ok: true, json: async () => claims});
+  const first = await verify('token', 'http://userinfo', mock);
+  claims = {...claims, preferred_username: 'renamed', nickname: '新名称', role_code: 'system_admin'};
+  const next = await verify('token', 'http://userinfo', mock);
+  assert.equal(first.username, next.username); assert.equal(next.name, '新名称'); assert.equal(next.admin, true);
+  claims.enable = 0;
+  await assert.rejects(verify('token', 'http://userinfo', mock));
+  await assert.rejects(verify('', 'http://userinfo', mock));
+});
+
+test('browser bridge validates OAuth state and follows VOS locale and account changes', async () => {
+  const script = await readFile(new URL('./bridge.js', import.meta.url), 'utf8');
+  async function browser(validState) {
+    const events = {}, requests = [], locations = [];
+    const oauth = {authorize: async p => ({code: 'code', state: validState ? p.state : 'forged'}), token: async () => ({access_token: 'verified-token'})};
+    const document = {getElementById: () => null, documentElement: {lang: 'en-US', dataset: {}}, querySelectorAll: () => [], body: {style: {}, replaceChildren: () => {}}, createElement: () => ({})};
+    const window = {vos_platform: {api: {v1000: {oauth2: oauth}}, getState: async () => ({locale: 'en', theme: 'dark'}), broadcast: {on: (name, cb) => {events[name] = cb; return () => {};}}}, addEventListener: () => {}};
+    const location = {href: 'https://vos.test/app/com.ictrek.gitea/', replace: value => locations.push(String(value)), reload: () => locations.push('reload')};
+    await vm.runInNewContext(script, {window, document, location, URL, crypto: webcrypto, TextEncoder, Uint8Array, btoa, setTimeout, setInterval: () => 1, clearInterval: () => {}, fetch: async (path, options) => {requests.push({path, ...options}); return {ok: true, json: async () => ({changed: false})};}});
+    return {events, requests, locations, document};
+  }
+  const good = await browser(true);
+  assert.equal(good.requests[0].path, BASE + '/vos/login');
+  assert.equal(JSON.parse(good.requests[0].body).access_token, 'verified-token');
+  assert.equal(good.document.documentElement.dataset.theme, 'gitea-dark');
+  await good.events['locale-change']({locale: 'zh-CN'});
+  assert.match(good.locations[0], /lang=zh-CN/);
+  await good.events['user-change']({user: null});
+  assert.equal(good.document.body.style.visibility, 'hidden');
+  assert.equal(good.requests.at(-1).path, BASE + '/vos/logout');
+  assert.equal(good.locations.at(-1), 'reload');
+  const forged = await browser(false);
+  assert.equal(forged.requests.some(r => r.path.endsWith('/vos/login')), false);
+});
+
+test('client identity headers are replaced and authorization never reaches Gitea', () => {
+  const h = upstreamHeaders({headers: {host: 'vos.test', authorization: 'Bearer secret', 'x-webauth-user': 'admin', 'x-vos-admin': 'true', 'x-forwarded-for': 'spoof'}}, {username: 'vos-real', subject: 'real', name: '中文', admin: false}, 'zh-CN');
+  assert.equal(h['x-webauth-user'], 'vos-real'); assert.equal(h['x-vos-admin'], 'false');
+  assert.equal(h.authorization, undefined); assert.equal(h['x-forwarded-for'], undefined);
+  assert.equal(decodeURIComponent(h['x-vos-display-name']), '中文');
+});
+
+test('gateway isolates accounts, validates machine access, rejects CSRF and revokes sessions', async t => {
+  let enabled = true;
+  const fetcher = async (_url, options) => {
+    const token = options.headers.authorization.slice(7);
+    return {ok: ['one', 'two'].includes(token), json: async () => ({sub: token, preferred_username: token, enable: enabled ? 1 : 0, role_code: 'user'})};
+  };
+  const upstream = http.createServer((req, res) => {
+    if (req.headers.authorization) {res.writeHead(401); return res.end();}
+    res.end(JSON.stringify({user: req.headers['x-webauth-user'], url: req.url, language: req.headers['x-vos-language']}));
+  });
+  upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
+  const gateway = createGateway({userinfoUrl: 'http://userinfo', upstream: `http://127.0.0.1:${upstream.address().port}`, fetcher});
+  gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
+  t.after(() => {gateway.closeAllConnections(); gateway.close(); upstream.closeAllConnections(); upstream.close();});
+  const origin = `http://127.0.0.1:${gateway.address().port}`, base = origin + BASE;
+  const login = token => fetch(base + '/vos/login', {method: 'POST', headers: {origin, 'content-type': 'application/json'}, body: JSON.stringify({access_token: token, locale: 'zh-CN'})});
+  const one = await login('one'), two = await login('two');
+  assert.equal(one.status, 200); assert.equal(two.status, 200);
+  const cookie1 = one.headers.get('set-cookie').split(';')[0], cookie2 = two.headers.get('set-cookie').split(';')[0];
+  assert.notEqual(cookie1, cookie2);
+  const r = await fetch(base + '/api/v1/user', {headers: {cookie: cookie1, 'x-webauth-user': 'admin'}});
+  assert.deepEqual(await r.json(), {user: username('one'), url: BASE + '/api/v1/user?lang=zh-CN', language: 'zh-CN'});
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie2}})).status, 200);
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Bearer one'}})).status, 200);
+  assert.equal((await fetch(base + '/owner/repo.git/info/refs', {headers: {authorization: `Basic ${Buffer.from('git:one').toString('base64')}`}})).status, 200);
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {'x-webauth-user': 'admin'}})).status, 401);
+  assert.equal((await fetch(base + '/api/v1/repos', {method: 'POST', headers: {cookie: cookie1, origin: 'http://evil.test'}})).status, 403);
+  assert.equal((await fetch(base + '/vos/login', {method: 'POST', headers: {origin: 'http://evil.test'}, body: '{}'})).status, 403);
+  enabled = false;
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie1}})).status, 401);
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Bearer one'}})).status, 401);
+  enabled = true;
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie1}})).status, 401);
+});

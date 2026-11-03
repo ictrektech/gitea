@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="__LANG__" data-theme="gitea-light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gitea · API</title>
+  <script src="/app/com.ictrek.gitea/vos/bridge.js" defer></script>
+  <style>
+    :root{color-scheme:light dark;font:16px/1.7 system-ui,sans-serif;background:#f7f9f8;color:#21322b}*{box-sizing:border-box}body{max-width:960px;margin:0 auto;padding:48px 28px 80px}h1{font-size:36px;letter-spacing:-1px;line-height:1.2}h2{font-size:21px;margin-top:36px}a{color:#247849}code,pre{font-family:ui-monospace,monospace;font-size:14px}pre{padding:20px;border:1px solid #d4ddd7;border-radius:10px;background:#fff;overflow:auto}code{overflow-wrap:anywhere}.eyebrow{color:#247849;font-size:13px;letter-spacing:2px;font-weight:600}.muted{color:#627269}table{width:100%;border-collapse:collapse}td,th{padding:12px;text-align:left;border-bottom:1px solid #d4ddd7}[data-theme="gitea-dark"]{background:#171e1a;color:#e0e9e3;color-scheme:dark}[data-theme="gitea-dark"] pre{background:#202923;border-color:#3e4b42}[data-theme="gitea-dark"] a,[data-theme="gitea-dark"] .eyebrow{color:#91ce75}[data-theme="gitea-dark"] .muted{color:#a7b8ac}
+  </style>
+</head>
+<body>
+<p class="eyebrow">GITEA / VOS</p>
+<section data-guide-lang="zh">
+  <h1>API 接入指南</h1>
+  <p class="muted">用同一个 VOS 身份连接代码仓库、脚本和应用。</p>
+  <h2>地址与身份</h2>
+  <table><tr><th>用途</th><th>地址</th></tr><tr><td>浏览器 API</td><td><code>/app/com.ictrek.gitea/api/v1</code></td></tr><tr><td>同机应用</td><td><code>http://gitea:8080/app/com.ictrek.gitea/api/v1</code></td></tr><tr><td>交互式 API 文档</td><td><a href="/app/com.ictrek.gitea/api/swagger">Swagger</a></td></tr></table>
+  <p>从 VOS 打开应用后自动登录。首次访问创建独立 Gitea 账户，之后按 VOS 的稳定用户 ID 同步显示名、管理员角色与语言；VOS 中改名不会改变仓库归属。普通用户仅能访问自己或被授权的仓库，系统管理员拥有 Gitea 管理权限。</p>
+  <h2>调用 API</h2>
+  <p>外部客户端可以使用原生 Gitea PAT，或使用 VOS 为 <code>com.ictrek.gitea</code> 签发的用户 access token。通过 VOS OAuth2 authorization code + PKCE 获取，令牌到期后按 VOS OAuth2 流程刷新。浏览器插件可调用 <code>window.vos_platform.api.v1000.oauth2.authorize()</code> 和 <code>token()</code>，并校验 state。不要将令牌写入仓库或日志。</p>
+  <pre>export GITEA_URL='https://&lt;VOS地址&gt;:1180/app/com.ictrek.gitea'
+# VOS_ACCESS_TOKEN 由你的 OAuth2 客户端提供
+curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
+  "$GITEA_URL/api/v1/user"
+
+curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
+  "$GITEA_URL/api/v1/user/repos"</pre>
+  <p>创建仓库：<code>POST /api/v1/user/repos</code>，JSON 示例 <code>{"name":"demo","private":true,"auto_init":true}</code>。仓库默认私有。更多接口使用上方 Swagger，路径前缀始终为 <code>/app/com.ictrek.gitea</code>。</p>
+  <h2>Git HTTPS</h2>
+  <p>使用页面给出的 HTTPS clone URL；用户名填写 Gitea 用户名，密码可使用原生 PAT 或 VOS access token。建议使用系统凭据管理器，不把令牌写入 URL。Git LFS 保留 Gitea 原生协议。浏览器登录统一走 VOS，无需第二套登录密码。</p>
+  <h2>原生 PAT 与 SSH 密钥</h2>
+  <p>在<a href="/app/com.ictrek.gitea/user/settings/applications">用户设置 → 应用</a>创建个人访问令牌，选择所需权限；令牌只显示一次。在<a href="/app/com.ictrek.gitea/user/settings/keys">用户设置 → SSH / GPG 密钥</a>添加自己的 SSH 公钥，私钥留在客户端。</p>
+  <pre># GITEA_TOKEN 为你自己创建的原生 PAT
+curl --fail -H "Authorization: token $GITEA_TOKEN" \
+  "$GITEA_URL/api/v1/user"
+
+# 默认 SSH 端口为 2222，用户名固定为 git
+ssh -T -p 2222 git@&lt;VOS设备IP或域名&gt;
+git clone ssh://git@&lt;VOS设备IP或域名&gt;:2222/&lt;仓库所有者&gt;/&lt;仓库名&gt;.git</pre>
+  <p>SSH 独立于宿主机管理用的 22 端口，安装参数可调整端口与外部域名；仓库页面会生成 clone 地址。首次使用先访问一次代码管理完成 VOS 账户创建。VOS 关联账户的 PAT 和 SSH 操作会通过应用专属平台凭据查询该用户的最新状态；用户被禁用、删除或平台校验不可用时拒绝访问。PAT 与 SSH 密钥也可分别在 Gitea 中撤销；VOS 退出浏览器会话不等于撤销这些长期凭据。</p>
+  <h2>Actions 与 Runner</h2>
+  <p>Actions 已开启。外部 Runner 使用前，请在安装配置“Gitea 对外访问地址”填写完整的 VOS 可达地址，供 checkout、任务 API 与 Webhook 使用；默认值适合同一 VOS 网络。先在仓库设置启用 Actions，再从“仓库 / 组织 / 用户 / 实例设置 → Actions → Runners”取得相应作用域的注册令牌。实例级 runner 需要管理员权限。Runner 在构建机独立运行，不会自动占用 VOS 容器的构建环境。</p>
+  <pre>mkdir -p ~/dev/build/gitea-runner
+cd ~/dev/build/gitea-runner
+# 先安装 Gitea Runner 5.x；将注册令牌存入仅自己可读的文件
+gitea-runner register --no-interactive \
+  --instance "$GITEA_URL" \
+  --token-file "$HOME/.config/gitea/runner-token" \
+  --name vos-runner --labels 'vos-linux:host'
+gitea-runner daemon</pre>
+  <p><code>--instance</code> 必须包含 <code>/app/com.ictrek.gitea/</code>，并能被 runner 和任务环境访问；同一 VOS 网络可用 <code>http://gitea:8080/app/com.ictrek.gitea/</code>。外部机器使用 VOS 的 HTTPS 地址并信任其证书。示例 host 标签直接在 runner 环境执行，仅用于可信仓库；需要容器隔离时按<a href="https://docs.gitea.com/runner/">官方 Runner 文档</a>配置 Docker 标签。持久保存 <code>.runner</code>，它包含机器凭据。</p>
+  <p>仓库中添加 <code>.gitea/workflows/ci.yml</code>：</p>
+  <pre>name: CI
+on: [push, workflow_dispatch]
+jobs:
+  verify:
+    runs-on: vos-linux
+    steps:
+      - uses: builtin:checkout
+      - run: echo 'VOS Gitea Actions ready'</pre>
+  <p>注册令牌用于新增 runner，机器凭据用于轮询任务，均不同于用户 PAT。注册后的 runner 按仓库 / 组织 / 实例作用域独立管理，不随浏览器退出而停止；撤销时需在相应 Runners 页面禁用或删除 runner，必要时重置注册令牌。任务与 Secrets 的权限遵循 Gitea 原生规则。</p>
+  <h2>公共目录与备份</h2>
+  <p>安装时在“Gitea 数据目录”中选择 VOS 公共目录或宿主机路径。<code>git/repositories/</code> 保存裸仓库，<code>gitea/</code> 保存 LFS、附件、头像等文件；账户、权限、Issue、PR 和 Actions 元数据保存在 PGV 的独立 <code>gitea</code> PostgreSQL 数据库。授权访问该目录的 NAS 用户能直接读取文件，因此应使用专用目录并限制 NAS 目录权限。应用内的仓库授权不会替代 NAS 目录授权。</p>
+  <p>应用配置与密钥位于 VOS 应用私有存储的 <code>config/</code>。备份时停止应用，同时备份数据目录、私有配置目录与 PGV 的 <code>gitea</code> 数据库；升级保留原路径。公开数据目录不会自动导入已有普通文件夹为 Git 仓库。</p>
+</section>
+<section data-guide-lang="en" hidden>
+  <h1>API integration guide</h1><p class="muted">Connect repositories, scripts and applications using your VOS identity.</p>
+  <h2>Endpoints and identity</h2>
+  <p>Browser API: <code>/app/com.ictrek.gitea/api/v1</code><br>Same-host applications: <code>http://gitea:8080/app/com.ictrek.gitea/api/v1</code><br><a href="/app/com.ictrek.gitea/api/swagger">Interactive Swagger documentation</a></p>
+  <p>Opening Gitea in VOS signs you in and provisions an independent account on first access. Your stable VOS subject owns the account; display name, language and administrator role synchronize on access. Renaming your VOS account preserves repository ownership. Repositories are private by default.</p>
+  <h2>API requests</h2>
+  <p>Use a native Gitea personal access token (PAT), or a VOS user access token for <code>com.ictrek.gitea</code>, obtained through authorization code + PKCE. Browser integrations can use <code>window.vos_platform.api.v1000.oauth2.authorize()</code> and <code>token()</code>, validating state. Refresh expired tokens using the VOS OAuth2 flow. Keep credentials out of source control and logs.</p>
+  <pre>export GITEA_URL='https://&lt;VOS-HOST&gt;:1180/app/com.ictrek.gitea'
+curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
+  "$GITEA_URL/api/v1/user"
+curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
+  "$GITEA_URL/api/v1/user/repos"</pre>
+  <p>Create a repository with <code>POST /api/v1/user/repos</code> and JSON <code>{"name":"demo","private":true,"auto_init":true}</code>. Refer to Swagger for the remaining API. All external paths include <code>/app/com.ictrek.gitea</code>.</p>
+  <h2>Git over HTTPS</h2><p>Use the HTTPS clone URL shown in Gitea. Enter your Gitea username and use a native PAT or VOS access token as the password. Keep it in your system credential manager. Git LFS retains its native protocol; browser sign-in uses VOS.</p>
+  <h2>Native PAT and SSH</h2><p>Create a scoped PAT in <a href="/app/com.ictrek.gitea/user/settings/applications">Settings → Applications</a>, or add an SSH public key in <a href="/app/com.ictrek.gitea/user/settings/keys">Settings → SSH / GPG Keys</a>. Keep private keys on your client. Open Code Management once before first use to provision your VOS account.</p>
+  <pre>curl --fail -H "Authorization: token $GITEA_TOKEN" "$GITEA_URL/api/v1/user"
+ssh -T -p 2222 git@&lt;VOS-HOST&gt;
+git clone ssh://git@&lt;VOS-HOST&gt;:2222/&lt;owner&gt;/&lt;repository&gt;.git</pre>
+  <p>Port 2222 is separate from host administration SSH; change it or the advertised hostname in installation settings. PAT and SSH access for linked users check current VOS account state through the app's platform credential, failing closed on disabled/deleted accounts or verification failure. Revoke individual PATs and keys in Gitea. Browser logout does not revoke these long-lived credentials.</p>
+  <h2>Actions and runners</h2><p>Actions is enabled. Set the installation option “Gitea Public URL” to the complete reachable VOS URL for external runners, checkout, job APIs and webhooks; its default is for the same VOS network. Enable it for your repository and obtain a registration token from its Actions → Runners settings, or use organization, user or instance scope. Instance runners require administrator privileges. Run Gitea Runner 5.x on your build machine:</p>
+  <pre>mkdir -p ~/dev/build/gitea-runner
+cd ~/dev/build/gitea-runner
+gitea-runner register --no-interactive \
+  --instance "$GITEA_URL" \
+  --token-file "$HOME/.config/gitea/runner-token" \
+  --name vos-runner --labels 'vos-linux:host'
+gitea-runner daemon</pre>
+  <p>Include <code>/app/com.ictrek.gitea/</code> in the instance URL. Inside the VOS network use <code>http://gitea:8080/app/com.ictrek.gitea/</code>; external runners need the VOS HTTPS address and certificate trust. Host labels execute in the runner environment and are suitable for trusted repositories; use Docker labels when isolation is needed. See the <a href="https://docs.gitea.com/runner/">official runner guide</a>. Persist the secret <code>.runner</code> file.</p>
+  <pre># .gitea/workflows/ci.yml
+name: CI
+on: [push, workflow_dispatch]
+jobs:
+  verify:
+    runs-on: vos-linux
+    steps:
+      - uses: builtin:checkout
+      - run: echo 'VOS Gitea Actions ready'</pre>
+  <p>Registration tokens, runner machine credentials and user PATs are separate. Registered runners use native repository/organization/instance scope and remain independent of browser sessions. Disable or delete a runner in its Runners settings to revoke it; reset registration tokens separately when needed. Jobs and Secrets follow native Gitea permissions.</p>
+  <h2>Shared storage and backups</h2><p>Select a VOS public directory or host path during installation. Bare repositories live in <code>git/repositories/</code>; Attachments, LFS and avatars live in <code>gitea/</code>; metadata lives in the dedicated PGV PostgreSQL database <code>gitea</code>. Use a dedicated directory with restrictive NAS permissions: filesystem readers can read repository files independently of Gitea permissions.</p><p>Secrets and configuration stay in the application's private <code>config/</code> storage. Stop the app and back up both directories and the PGV gitea database together. Keep the same paths on upgrades. Existing ordinary directories are not automatically imported as repositories.</p>
+</section>
+</body></html>

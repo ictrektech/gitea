@@ -1,0 +1,53 @@
+x-gitea: &gitea
+  restart: unless-stopped
+  networks:
+    vos_default:
+      aliases: [gitea, ictrek-gitea]
+  environment:
+    VOS_USERINFO_URL: http://${VOS_HOST_GW_IP}:${VOS_API_GW_PORT_INTERNAL}/v1000/oauth2/userinfo
+    VOS_USERS_URL: http://${VOS_HOST_GW_IP}:${VOS_API_GW_PORT_INTERNAL}/v1000/user/list
+    VOS_POSTGRES_PASSWORD: ${VOS_POSTGRES_PASSWORD:?PGV bootstrap credentials are required}
+    GITEA_SSH_PORT: ${GITEA_SSH_PORT:-2222}
+    GITEA_SSH_DOMAIN: ${GITEA_SSH_DOMAIN:-}
+    GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-http://gitea:8080/app/com.ictrek.gitea/}
+  ports:
+    - "${GITEA_SSH_PORT:-2222}:2222"
+  volumes:
+    - ${GITEA_DATA_PATH:?Select a Gitea data directory}:/data
+    - ${VOS_APP_STORAGE_PATH}/config:/config
+    - ${VOS_APP_CONTEXT_PATH:-}:/var/lib/vos-context:ro
+  healthcheck:
+    test: [CMD, node, -e, "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    interval: 15s
+    timeout: 5s
+    start_period: 60s
+    retries: 5
+  labels:
+    - "traefik.enable=true"
+    - "traefik.docker.network=vos_default"
+    - "traefik.http.routers.gitea-top.rule=PathPrefix(`/app/com.ictrek.gitea`) && HeadersRegexp(`Sec-Fetch-Dest`, `document`)"
+    - "traefik.http.routers.gitea-top.priority=1000"
+    - "traefik.http.routers.gitea-top.service=ictrek-gitea"
+    - "traefik.http.routers.gitea-top.middlewares=gitea-top-redirect"
+    - "traefik.http.middlewares.gitea-top-redirect.redirectregex.regex=^(https?://[^/]+)/app/com\\.ictrek\\.gitea/?(?:\\?.*)?$"
+    - "traefik.http.middlewares.gitea-top-redirect.redirectregex.replacement=$${1}/#/app/app-drawer/com.ictrek.gitea/gitea"
+    - "traefik.http.middlewares.gitea-top-redirect.redirectregex.permanent=false"
+    - "traefik.http.routers.ictrek-gitea.rule=PathPrefix(`/app/com.ictrek.gitea`)"
+    - "traefik.http.routers.ictrek-gitea.service=ictrek-gitea"
+    - "traefik.http.routers.ictrek-gitea.middlewares=gitea-slash"
+    - "traefik.http.middlewares.gitea-slash.redirectregex.regex=^(.*)/app/com\\.ictrek\\.gitea$"
+    - "traefik.http.middlewares.gitea-slash.redirectregex.replacement=$${1}/app/com.ictrek.gitea/"
+    - "traefik.http.middlewares.gitea-slash.redirectregex.permanent=true"
+    - "traefik.http.services.ictrek-gitea.loadbalancer.server.port=8080"
+services:
+  gitea-amd:
+    <<: *gitea
+    profiles: [amd]
+    image: ${GITEA_AMD_IMAGE}
+  gitea-arm:
+    <<: *gitea
+    profiles: [arm]
+    image: ${GITEA_ARM_IMAGE}
+networks:
+  vos_default:
+    external: true
