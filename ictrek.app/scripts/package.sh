@@ -444,6 +444,12 @@ with open(sys.argv[1], encoding="utf-8") as source:
 for profile in profiles:
     if not all(profile.get(field) for field in ("name", "title", "description")):
         raise SystemExit("Every VOS profile requires name, title and description")
+    title = profile["title"]
+    if not isinstance(title, dict) or any(
+        not isinstance(title.get(locale), str) or not title[locale].strip()
+        for locale in ("zh-CN", "en")
+    ):
+        raise SystemExit(f'Profile {profile["name"]} requires localized zh-CN and en titles')
 PYPROFILE
 render_compose_file "${SRC_DIR}/docker-compose.yml" "${STAGE_DIR}/docker-compose.yml" "$ENV_FILE"
 cp "${SRC_DIR}/icon.png" "${STAGE_DIR}/icon.png"
