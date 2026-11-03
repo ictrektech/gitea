@@ -45,7 +45,7 @@ NAS 目录权限独立于 Gitea 仓库权限：能直接读取数据目录的用
 
 应用依赖已发布的 PGV；打包时从其最新 GitHub Release 验证实际版本，并写入 manifest。首次启动通过 VOS 提供的 PGV 管理凭据创建专用 `gitea` 数据库和非超级用户，随机密码保存在私有配置中；Gitea 子进程仅收到专用连接配置。已有数据库或角色的密码不匹配时停止初始化，不自动重置，不修改其他应用数据库。恢复安装时需一起恢复私有配置和数据库。
 
-SSH 默认映射宿主机 `2222` 到容器内置 SSH 服务器，与宿主机管理用 22 端口分离。安装可配置 `GITEA_SSH_PORT`、`GITEA_SSH_DOMAIN`；域名留空时按页面当前访问地址生成 clone URL。公钥在“用户设置 → SSH / GPG 密钥”添加，私钥留在客户端。
+SSH 默认映射宿主机 `32222` 到容器 `2222` 的内置 SSH 服务器，与宿主机管理用 22 端口分离。安装可配置 `GITEA_SSH_PORT`、`GITEA_SSH_DOMAIN`；域名留空时按页面当前访问地址生成 clone URL。公钥在“用户设置 → SSH / GPG 密钥”添加，私钥留在客户端。
 
 Actions 默认开启，Runner 独立安装在构建机。`GITEA_PUBLIC_URL` 决定 Actions checkout、任务 API 和 Webhook 的标准地址：同一 VOS 网络默认使用 `http://gitea:8080/app/com.ictrek.gitea/`，外部 Runner 应配置完整设备地址，例如 `https://<设备IP>:1180/app/com.ictrek.gitea/`，并在任务环境中信任证书。
 

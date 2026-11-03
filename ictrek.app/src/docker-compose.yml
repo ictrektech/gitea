@@ -7,11 +7,11 @@ x-gitea: &gitea
     VOS_USERINFO_URL: http://${VOS_HOST_GW_IP}:${VOS_API_GW_PORT_INTERNAL}/v1000/oauth2/userinfo
     VOS_USERS_URL: http://${VOS_HOST_GW_IP}:${VOS_API_GW_PORT_INTERNAL}/v1000/user/list
     VOS_POSTGRES_PASSWORD: ${VOS_POSTGRES_PASSWORD:?PGV bootstrap credentials are required}
-    GITEA_SSH_PORT: ${GITEA_SSH_PORT:-2222}
+    GITEA_SSH_PORT: ${GITEA_SSH_PORT:-32222}
     GITEA_SSH_DOMAIN: ${GITEA_SSH_DOMAIN:-}
     GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-http://gitea:8080/app/com.ictrek.gitea/}
   ports:
-    - "${GITEA_SSH_PORT:-2222}:2222"
+    - "${GITEA_SSH_PORT:-32222}:2222"
   volumes:
     - ${GITEA_DATA_PATH:?Select a Gitea data directory}:/data
     - ${VOS_APP_STORAGE_PATH}/config:/config

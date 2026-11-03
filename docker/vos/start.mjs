@@ -6,7 +6,7 @@ import {prepareDatabase} from './database.mjs';
 
 const secretPath = '/config/conf/secrets.json';
 if (!process.env.VOS_USERINFO_URL || !process.env.VOS_USERS_URL) throw Error('VOS API endpoints are required');
-const sshPort = Number(process.env.GITEA_SSH_PORT || 2222);
+const sshPort = Number(process.env.GITEA_SSH_PORT || 32222);
 const sshDomain = process.env.GITEA_SSH_DOMAIN || 'localhost';
 if (!Number.isInteger(sshPort) || sshPort < 1 || sshPort > 65535 || !/^[a-zA-Z0-9.:-]+$/.test(sshDomain)) throw Error('Invalid SSH address');
 const publicURL = new URL(process.env.GITEA_PUBLIC_URL || `http://gitea:8080${BASE}/`);

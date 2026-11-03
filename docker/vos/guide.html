@@ -34,9 +34,9 @@ curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
 curl --fail -H "Authorization: token $GITEA_TOKEN" \
   "$GITEA_URL/api/v1/user"
 
-# 默认 SSH 端口为 2222，用户名固定为 git
-ssh -T -p 2222 git@&lt;VOS设备IP或域名&gt;
-git clone ssh://git@&lt;VOS设备IP或域名&gt;:2222/&lt;仓库所有者&gt;/&lt;仓库名&gt;.git</pre>
+# 默认 SSH 端口为 32222，用户名固定为 git
+ssh -T -p 32222 git@&lt;VOS设备IP或域名&gt;
+git clone ssh://git@&lt;VOS设备IP或域名&gt;:32222/&lt;仓库所有者&gt;/&lt;仓库名&gt;.git</pre>
   <p>SSH 独立于宿主机管理用的 22 端口，安装参数可调整端口与外部域名；仓库页面会生成 clone 地址。首次使用先访问一次代码管理完成 VOS 账户创建。VOS 关联账户的 PAT 和 SSH 操作会通过应用专属平台凭据查询该用户的最新状态；用户被禁用、删除或平台校验不可用时拒绝访问。PAT 与 SSH 密钥也可分别在 Gitea 中撤销；VOS 退出浏览器会话不等于撤销这些长期凭据。</p>
   <h2>Actions 与 Runner</h2>
   <p>Actions 已开启。外部 Runner 使用前，请在安装配置“Gitea 对外访问地址”填写完整的 VOS 可达地址，供 checkout、任务 API 与 Webhook 使用；默认值适合同一 VOS 网络。先在仓库设置启用 Actions，再从“仓库 / 组织 / 用户 / 实例设置 → Actions → Runners”取得相应作用域的注册令牌。实例级 runner 需要管理员权限。Runner 在构建机独立运行，不会自动占用 VOS 容器的构建环境。</p>
@@ -79,9 +79,9 @@ curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
   <h2>Git over HTTPS</h2><p>Use the HTTPS clone URL shown in Gitea. Enter your Gitea username and use a native PAT or VOS access token as the password. Keep it in your system credential manager. Git LFS retains its native protocol; browser sign-in uses VOS.</p>
   <h2>Native PAT and SSH</h2><p>Create a scoped PAT in <a href="/app/com.ictrek.gitea/user/settings/applications">Settings → Applications</a>, or add an SSH public key in <a href="/app/com.ictrek.gitea/user/settings/keys">Settings → SSH / GPG Keys</a>. Keep private keys on your client. Open Code Management once before first use to provision your VOS account.</p>
   <pre>curl --fail -H "Authorization: token $GITEA_TOKEN" "$GITEA_URL/api/v1/user"
-ssh -T -p 2222 git@&lt;VOS-HOST&gt;
-git clone ssh://git@&lt;VOS-HOST&gt;:2222/&lt;owner&gt;/&lt;repository&gt;.git</pre>
-  <p>Port 2222 is separate from host administration SSH; change it or the advertised hostname in installation settings. PAT and SSH access for linked users check current VOS account state through the app's platform credential, failing closed on disabled/deleted accounts or verification failure. Revoke individual PATs and keys in Gitea. Browser logout does not revoke these long-lived credentials.</p>
+ssh -T -p 32222 git@&lt;VOS-HOST&gt;
+git clone ssh://git@&lt;VOS-HOST&gt;:32222/&lt;owner&gt;/&lt;repository&gt;.git</pre>
+  <p>Port 32222 is separate from host administration SSH; change it or the advertised hostname in installation settings. PAT and SSH access for linked users check current VOS account state through the app's platform credential, failing closed on disabled/deleted accounts or verification failure. Revoke individual PATs and keys in Gitea. Browser logout does not revoke these long-lived credentials.</p>
   <h2>Actions and runners</h2><p>Actions is enabled. Set the installation option “Gitea Public URL” to the complete reachable VOS URL for external runners, checkout, job APIs and webhooks; its default is for the same VOS network. Enable it for your repository and obtain a registration token from its Actions → Runners settings, or use organization, user or instance scope. Instance runners require administrator privileges. Run Gitea Runner 5.x on your build machine:</p>
   <pre>mkdir -p ~/dev/build/gitea-runner
 cd ~/dev/build/gitea-runner

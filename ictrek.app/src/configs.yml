@@ -17,7 +17,7 @@ configs:
     description:
       zh-CN: 宿主机用于 Git SSH 克隆和推送的端口，与宿主机管理 SSH 分离。
       en: Host port for Git SSH clone and push, separate from host administration SSH.
-    default: 2222
+    default: 32222
   - name: GITEA_SSH_DOMAIN
     type: string
     title:
