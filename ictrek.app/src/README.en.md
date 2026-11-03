@@ -6,4 +6,6 @@ Select an architecture and dedicated data directory during installation. VOS pub
 
 API prefix: `/app/com.ictrek.gitea/api/v1`. Same-host applications use `http://gitea:8080/app/com.ictrek.gitea/api/v1`. Use VOS access tokens for API requests and as Git HTTPS passwords. The in-app guide describes OAuth2 / PKCE. Browser login uses VOS. Native PATs, SSH and Actions are enabled. Git SSH defaults to port 32222. Configure the complete Gitea Public URL for external runners and checkout/job APIs. The in-app guide covers registration, workflows and credential revocation.
 
+The app starts one Actions runner (`act-runner`) by default. It registers with a global registration token, so no administrator action is needed. The runner mounts the host `/var/run/docker.sock`, which grants container creation and root-equivalent host access. Job containers join the `vos_default` network and reach the instance at `http://gitea:8080/app/com.ictrek.gitea`. The default job image is `node:22-bookworm`; mirror it into a local registry and update the runner labels for offline deployments. A bare `uses: owner/repo@ref` resolves against the Gitea Public URL, which must present a valid certificate when it uses HTTPS.
+
 Keep the same storage paths on upgrades. Existing GitLab accounts, repositories and data are not migrated or removed.

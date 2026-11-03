@@ -6,4 +6,6 @@ VOS 轻量代码托管与评审应用，提供“代码管理”和“API 接入
 
 API 前缀为 `/app/com.ictrek.gitea/api/v1`；同机应用使用 `http://gitea:8080/app/com.ictrek.gitea/api/v1`。外部 API 使用 VOS access token，Git HTTPS 将其作为密码。OAuth2 / PKCE 说明见应用内指南。浏览器统一 VOS 登录，原生 PAT、SSH 和 Actions 已开放。默认 Git SSH 端口为 32222；外部 Runner 请配置完整的“Gitea 对外访问地址”，供 checkout / 任务 API 使用。API 指南包含注册、认证、工作流和凭据撤销说明。
 
+默认随应用启动一个 Actions runner（服务 `act-runner`），用全局注册令牌自动注册，无需管理员操作。runner 挂载宿主机 `/var/run/docker.sock`，具备创建容器、等同宿主机 root 的权限。job 容器加入 `vos_default` 网络，通过 `http://gitea:8080/app/com.ictrek.gitea` 访问实例；默认 job 镜像为 `node:22-bookworm`，离线环境需预置到内网 registry 并调整 runner 标签。裸引用 `uses: owner/repo@ref` 解析为“Gitea 对外访问地址”，该地址使用 HTTPS 时必须提供有效证书。
+
 升级保留原路径。本应用不会迁移或删除已安装 GitLab 的账户、仓库或数据。
