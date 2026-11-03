@@ -138,7 +138,7 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         request(info_host, '/control', payload={'admin': {'role_code': 'user'}})
         code, data, _ = request(base, '/api/v1/user', 'admin')
         assert code == 200 and not json.loads(data)['is_admin'], 'Last-admin guard must not override VOS role changes'
-        request(info_host, '/control', payload={'alice': {'nickname': 'Renamed VOS user'}})
+        request(info_host, '/control', payload={'alice': {'nickname': 'Renamed VOS user', 'preferred_username': ''}})
         code, data, _ = request(base, '/api/v1/user', 'alice')
         renamed = json.loads(data)
         assert renamed['id'] == identities['alice']['id'] and renamed['full_name'] == 'Renamed VOS user'
