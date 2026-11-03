@@ -46,5 +46,7 @@ storage:
   directories:
     - path: config
       mode: "0700"
+    - path: runner
+      mode: "0700"
 oauth2:
   client: {}

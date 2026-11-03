@@ -48,6 +48,27 @@ services:
     <<: *gitea
     profiles: [arm]
     image: ${GITEA_ARM_IMAGE}
+  act-runner:
+    restart: unless-stopped
+    image: docker.io/gitea/act_runner:latest
+    networks: [vos_default]
+    environment:
+      GITEA_INSTANCE_URL: http://gitea:8080/app/com.ictrek.gitea
+      GITEA_RUNNER_REGISTRATION_TOKEN_FILE: /config/runner/registration-token
+      GITEA_RUNNER_NAME: ${ACT_RUNNER_NAME:-vos-runner}
+      GITEA_RUNNER_LABELS: ${ACT_RUNNER_LABELS:-ubuntu-latest:docker://node:22-bookworm}
+      CONFIG_FILE: /data/config.yaml
+    volumes:
+      - ${VOS_APP_STORAGE_PATH}/runner:/data
+      - ${VOS_APP_STORAGE_PATH}/config:/config:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while [ ! -s /config/runner/registration-token ]; do sleep 2; done
+        [ -s /data/config.yaml ] || printf 'log:\n  level: info\nrunner:\n  file: .runner\n  capacity: 1\ncontainer:\n  network: vos_default\n' > /data/config.yaml
+        exec /sbin/tini -- /usr/local/bin/run.sh
 networks:
   vos_default:
     external: true

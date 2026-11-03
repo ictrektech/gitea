@@ -3,6 +3,7 @@ import {randomBytes} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createGateway, BASE} from './gateway.mjs';
 import {prepareDatabase} from './database.mjs';
+import {ensureGlobalRunnerToken} from './runner_token.mjs';
 
 const secretPath = '/config/conf/secrets.json';
 if (!process.env.VOS_USERINFO_URL || !process.env.VOS_USERS_URL) throw Error('VOS API endpoints are required');
@@ -96,8 +97,26 @@ DEFAULT_ACTIONS_URL = self
 await writeFile('/config/conf/app.ini', ini, {mode: 0o600});
 await mkdir('/config/templates/custom', {recursive: true});
 await writeFile('/config/templates/custom/header.tmpl', `<script src="${BASE}/vos/bridge.js" defer></script>`);
+async function publishRunnerToken(password) {
+  let reported = false;
+  for (;;) {
+    try {
+      const ready = await fetch('http://127.0.0.1:8080/healthz', {signal: AbortSignal.timeout(5000)}).then(r => r.ok, () => false);
+      if (!ready) throw Error('Gitea is not ready');
+      const token = await ensureGlobalRunnerToken({password});
+      await mkdir('/config/runner', {recursive: true, mode: 0o700});
+      await writeFile('/config/runner/registration-token', `${token}\n`, {mode: 0o600});
+      return;
+    } catch (error) {
+      if (!reported) console.error(`Runner registration token is not available yet: ${error.message}`);
+      reported = true;
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+  }
+}
 const child = spawn('/usr/local/bin/gitea', ['web', '--config', '/config/conf/app.ini'], {stdio: 'inherit', env: {...process.env, GITEA_WORK_DIR: '/data/gitea', GITEA_CUSTOM: '/config', VOS_AUTH_ENABLED: 'true'}});
 const gateway = createGateway({userinfoUrl: process.env.VOS_USERINFO_URL});
 gateway.listen(8080, '0.0.0.0');
+publishRunnerToken(secrets.database);
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { gateway.close(); child.kill(signal); });
 child.on('exit', code => { gateway.close(); process.exit(code || 0); });
