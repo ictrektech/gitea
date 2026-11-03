@@ -436,6 +436,15 @@ for file in manifest.yml configs.yml routers.yml README.zh-CN.md README.en.md; d
   fi
 done
 python3 "${ROOT_DIR}/scripts/resolve_dependencies.py" "${STAGE_DIR}/manifest.yml" --repositories "${ROOT_DIR}/dependency-releases.json"
+python3 - "${STAGE_DIR}/manifest.yml" <<'PYPROFILE'
+import sys
+import yaml
+with open(sys.argv[1], encoding="utf-8") as source:
+    profiles = yaml.safe_load(source)["profiles"]
+for profile in profiles:
+    if not all(profile.get(field) for field in ("name", "title", "description")):
+        raise SystemExit("Every VOS profile requires name, title and description")
+PYPROFILE
 render_compose_file "${SRC_DIR}/docker-compose.yml" "${STAGE_DIR}/docker-compose.yml" "$ENV_FILE"
 cp "${SRC_DIR}/icon.png" "${STAGE_DIR}/icon.png"
 validate_icon_file "${STAGE_DIR}/icon.png"

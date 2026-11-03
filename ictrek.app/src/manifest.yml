@@ -23,11 +23,17 @@ dependencies:
 profiles:
   - name: amd
     title: AMD64
+    description:
+      zh-CN: AMD64 / x86_64 平台，无需 GPU。
+      en: AMD64 / x86_64 platform, no GPU required.
     caps:
       arch: amd64
     conflicts: [arm]
   - name: arm
     title: ARM64
+    description:
+      zh-CN: ARM64 平台，适用于 L4T、Thor 和 Spark，无需 GPU。
+      en: ARM64 platform for L4T, Thor and Spark, no GPU required.
     caps:
       arch: arm64
     conflicts: [amd]
