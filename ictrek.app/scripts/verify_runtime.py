@@ -156,7 +156,7 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         assert docker('exec', postgres, 'psql', '-U', 'postgres', '-Atq', '-c', "SELECT datname FROM pg_database WHERE datname='gitea'") == 'gitea'
         assert any((storage / 'data/git/repositories').glob('*/*.git'))
         assert (storage / 'config/conf/secrets.json').is_file()
-        assert (storage / 'config/ssh/gitea.ed25519').stat().st_mode & 0o777 == 0o600
+        assert docker('exec', '--user', 'node', app, 'stat', '-c', '%a', '/config/ssh/gitea.ed25519') == '600'
         ssh_port = int(address(app, 2222).rsplit(':', 1)[1])
         with socket.create_connection(('127.0.0.1', ssh_port), timeout=5) as ssh_client:
             assert ssh_client.recv(128).startswith(b'SSH-2.0-')
