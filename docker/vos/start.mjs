@@ -91,6 +91,7 @@ MODE = console
 LEVEL = Warn
 [actions]
 ENABLED = true
+DEFAULT_ACTIONS_URL = self
 `;
 await writeFile('/config/conf/app.ini', ini, {mode: 0o600});
 await mkdir('/config/templates/custom', {recursive: true});
