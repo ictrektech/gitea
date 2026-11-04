@@ -41,7 +41,7 @@ export function upstreamHeaders(req, user, locale) {
     'x-webauth-user': user.username, 'x-webauth-email': `${user.username}@vos.invalid`, 'x-vos-subject': user.subject,
     'x-vos-username': encodeURIComponent(user.preferredUsername || ''), 'x-vos-display-name': encodeURIComponent(user.name), 'x-vos-admin': String(user.admin), 'x-vos-language': locale || ''};
 }
-export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', fetcher = fetch}) {
+export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', mcpUpstream = 'http://gitea-mcp:8080', fetcher = fetch}) {
   const sessions = new Map();
   const id = req => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === 'gitea_vos_session')?.[1];
   const json = (res, data) => respond(res, 200, JSON.stringify(data), 'application/json');
@@ -50,6 +50,7 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
     if (req.headers.authorization) {
       let token;
       if (req.headers.authorization.startsWith('Bearer ')) token = req.headers.authorization.slice(7);
+      else if (req.headers.authorization.startsWith('token ')) token = req.headers.authorization.slice(6); // gitea-mcp forwards credentials with this scheme; dropping it loses VOS tokens
       else if (req.headers.authorization.startsWith('Basic ')) {
         const value = Buffer.from(req.headers.authorization.slice(6), 'base64').toString();
         token = value.slice(value.indexOf(':') + 1);
@@ -74,6 +75,34 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
       }
       if (!url.pathname.startsWith(`${BASE}/`)) return respond(res, 404);
       const path = url.pathname.slice(BASE.length);
+      if (path === '/mcp') {
+        // Keeps MCP from running for anonymous callers; the sidecar stores no credentials itself.
+        if (req.method !== 'POST') return respond(res, 405, 'Method not allowed');
+        const authorization = String(req.headers.authorization || '');
+        const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+        if (!token) {
+          res.setHeader('www-authenticate', 'Bearer');
+          return respond(res, 401, 'VOS token or Gitea PAT required');
+        }
+        // PATs are cheap to check locally; VOS is only asked when Gitea rejects the credential.
+        const pat = await fetcher(`${upstream}${BASE}/api/v1/user`, {headers: {authorization}, redirect: 'error', signal: AbortSignal.timeout(10000)}).catch(() => null);
+        if (!pat?.ok) {
+          const vos = await verify(token, userinfoUrl, fetcher).then(() => true, () => false);
+          if (!vos) {
+            res.setHeader('www-authenticate', 'Bearer');
+            return respond(res, 401, 'VOS token or Gitea PAT required');
+          }
+        }
+        const headers = Object.fromEntries(Object.entries(req.headers).filter(([key]) => !HOP.has(key)));
+        // Authorization stays untouched, the sidecar forwards it to Gitea for per-user tool permissions.
+        const proxy = http.request(new URL('/mcp', mcpUpstream), {method: 'POST', headers: {...headers, host: req.headers.host}}, mcpRes => {
+          const out = Object.fromEntries(Object.entries(mcpRes.headers).filter(([key]) => !HOP.has(key)));
+          res.writeHead(mcpRes.statusCode, out); mcpRes.pipe(res);
+        });
+        proxy.on('error', () => { if (!res.headersSent) respond(res, 502, 'MCP unavailable'); else res.destroy(); });
+        req.on('aborted', () => proxy.destroy()); req.pipe(proxy);
+        return;
+      }
       if (path === '/vos/bridge.js' && req.method === 'GET') return respond(res, 200, await readFile(new URL('bridge.js', ROOT)), 'text/javascript; charset=utf-8');
       if (path === '/vos/login') {
         if (req.method !== 'POST' || !sameOrigin(req)) return respond(res, 403);

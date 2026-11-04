@@ -86,3 +86,55 @@ test('gateway isolates accounts, validates machine access, rejects CSRF and revo
   enabled = true;
   assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie1}})).status, 401);
 });
+
+test('MCP endpoint requires a VOS token or a valid Gitea PAT', async t => {
+  let vosCalls = 0;
+  const fetcher = async (url, options) => {
+    const authorization = options.headers.authorization;
+    // Gitea accepts its own PATs in both schemes, like the real server
+    if (String(url).endsWith('/api/v1/user')) return {ok: ['Bearer gitea-pat', 'token gitea-pat'].includes(authorization)};
+    vosCalls++;
+    const token = authorization.slice(7);
+    return {ok: token === 'vos-token', json: async () => ({sub: token, enable: 1, role_code: 'user'})};
+  };
+  const upstream = http.createServer((req, res) => {
+    const authorization = req.headers.authorization || '';
+    if (authorization === 'Bearer gitea-pat' || authorization === 'token gitea-pat') return res.end(JSON.stringify({user: 'pat'}));
+    if (authorization) {res.writeHead(401); return res.end();}
+    res.end(JSON.stringify({user: req.headers['x-webauth-user'] || ''}));
+  });
+  const mcp = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => res.end(JSON.stringify({url: req.url, authorization: req.headers.authorization || '', body})));
+  });
+  upstream.listen(0, '127.0.0.1'); mcp.listen(0, '127.0.0.1');
+  await Promise.all([once(upstream, 'listening'), once(mcp, 'listening')]);
+  const gateway = createGateway({userinfoUrl: 'http://userinfo', upstream: `http://127.0.0.1:${upstream.address().port}`, mcpUpstream: `http://127.0.0.1:${mcp.address().port}`, fetcher});
+  gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
+  t.after(() => {
+    for (const server of [gateway, upstream, mcp]) { server.closeAllConnections(); server.close(); }
+  });
+  const origin = `http://127.0.0.1:${gateway.address().port}`, base = origin + BASE;
+  const call = (headers = {}, method = 'POST') => fetch(base + '/mcp', {method, headers: {'content-type': 'application/json', ...headers}, body: method === 'POST' ? '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' : undefined});
+  const anonymous = await call();
+  assert.equal(anonymous.status, 401);
+  assert.equal(anonymous.headers.get('www-authenticate'), 'Bearer');
+  assert.equal((await call({authorization: 'Bearer invalid'})).status, 401);
+  assert.equal((await call({cookie: 'gitea_vos_session=forged'})).status, 401);
+  assert.equal((await call({}, 'GET')).status, 405);
+  const pat = await call({authorization: 'Bearer gitea-pat', origin: 'http://vos.test', host: 'vos.test'}); // the sidecar compares Origin with Host
+  assert.equal(pat.status, 200);
+  const patBody = await pat.json();
+  assert.equal(patBody.url, '/mcp');
+  assert.equal(patBody.authorization, 'Bearer gitea-pat');
+  assert.equal(patBody.body, '{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+  assert.equal(vosCalls, 1); // a valid PAT never reaches VOS
+  const vos = await call({authorization: 'Bearer vos-token'});
+  assert.equal(vos.status, 200);
+  assert.equal((await vos.json()).authorization, 'Bearer vos-token');
+  // the sidecar forwards VOS tokens with the "token" scheme, which must still resolve to the VOS identity
+  const forwarded = await fetch(base + '/api/v1/user', {headers: {authorization: 'token vos-token'}});
+  assert.equal(forwarded.status, 200);
+  assert.equal((await forwarded.json()).user, username('vos-token'));
+});
