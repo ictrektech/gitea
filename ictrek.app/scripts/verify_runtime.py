@@ -10,8 +10,13 @@ import subprocess
 import tempfile
 import time
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 import uuid
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def docker(*args):
@@ -52,7 +57,7 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         mapping = json.loads(docker('inspect', name))[0]['NetworkSettings']['Ports'][f'{port}/tcp'][0]
         return 'http://127.0.0.1:' + mapping['HostPort']
 
-    def request(base, path, token=None, payload=None, cookie=None, origin=None, native=None):
+    def request(base, path, token=None, payload=None, cookie=None, origin=None, native=None, follow=True):
         headers = {}
         if native:
             headers['Authorization'] = 'token ' + native
@@ -66,8 +71,9 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         if payload is not None:
             data = json.dumps(payload).encode()
             headers['Content-Type'] = 'application/json'
+        opener = build_opener() if follow else build_opener(NoRedirect)
         try:
-            with urlopen(Request(base + path, data=data, headers=headers), timeout=20) as response:
+            with opener.open(Request(base + path, data=data, headers=headers), timeout=20) as response:
                 return response.status, response.read(), response.headers
         except HTTPError as error:
             return error.code, error.read(), error.headers
@@ -119,8 +125,8 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         assert identities['admin']['login'] == 'admin'
         assert identities['bob']['login'].startswith('admin-')
         assert identities['alice']['login'].startswith('vos-')
-        code, data, _ = request(base, '/user/sign_up', 'alice')
-        assert code == 403
+        code, data, headers = request(base, '/user/sign_up', 'alice', follow=False)
+        assert code == 302 and headers['Location'] == base.removeprefix(host) + '/', (code, headers['Location'], data[:200])
         code, data, headers = request(base, '/vos/login', payload={'access_token': 'alice', 'locale': 'zh-CN'}, origin=host)
         assert code == 200
         cookie = headers['Set-Cookie'].split(';')[0]
