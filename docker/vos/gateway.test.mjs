@@ -107,6 +107,11 @@ test('gateway isolates accounts, validates machine access, rejects CSRF and revo
   assert.equal((await fetch(base + '/vos/locale', {method: 'POST', headers: {authorization: 'Bearer one', origin, 'content-type': 'application/json'}, body: '{"locale":"en-US"}'})).status, 403);
   assert.equal((await fetch(base + '/api/v1/repos', {method: 'POST', headers: {cookie: cookie1, origin: 'http://evil.test'}})).status, 403);
   assert.equal((await fetch(base + '/vos/login', {method: 'POST', headers: {origin: 'http://evil.test'}, body: '{}'})).status, 403);
+  const nativeLogin = await fetch(base + '/user/login?redirect_to=' + encodeURIComponent(BASE + '/user/stopwatches'), {headers: {cookie: cookie1}, redirect: 'manual'});
+  assert.equal(nativeLogin.status, 302);
+  assert.equal(nativeLogin.headers.get('location'), BASE + '/user/stopwatches');
+  assert.equal((await fetch(base + '/user/login', {headers: {cookie: cookie1}, redirect: 'manual'})).headers.get('location'), BASE + '/');
+  assert.equal((await fetch(base + '/user/login?redirect_to=' + encodeURIComponent('https://evil.test/'), {headers: {cookie: cookie1}, redirect: 'manual'})).headers.get('location'), BASE + '/');
   enabled = false;
   assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie1}})).status, 401);
   assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Bearer one'}})).status, 401);

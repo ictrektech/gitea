@@ -140,7 +140,11 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         sessions.get(id(req)).locale = language((await body(req)).locale); return respond(res, 204);
       }
       if (path === '/integration-guide' && req.method === 'GET') return respond(res, 200, (await readFile(new URL('guide.html', ROOT), 'utf8')).replace('__LANG__', auth.locale || 'en-US'), 'text/html; charset=utf-8');
-      if (path.startsWith('/user/login') || path.startsWith('/user/sign_up') || path.startsWith('/login/oauth')) return respond(res, 403, 'Use VOS authentication');
+      if (path.startsWith('/user/login') || path.startsWith('/user/sign_up') || path.startsWith('/login/oauth')) {
+        const to = url.searchParams.get('redirect_to') || '';
+        res.setHeader('location', to.startsWith(`${BASE}/`) ? to : `${BASE}/`);
+        return respond(res, 302, 'VOS authentication required');
+      }
       if (auth.locale && req.method === 'GET') url.searchParams.set('lang', auth.locale);
       const target = new URL(url.pathname + url.search, upstream);
       const proxy = http.request(target, {method: req.method, headers: upstreamHeaders(req, auth.user, auth.locale)}, upstreamRes => {
