@@ -8,6 +8,6 @@ API 前缀为 `/app/com.ictrek.gitea/api/v1`；同机应用使用 `http://gitea:
 
 默认随应用启动一个 Actions runner（服务 `act-runner`），用全局注册令牌自动注册，无需管理员操作。runner 挂载宿主机 `/var/run/docker.sock`，具备创建容器、等同宿主机 root 的权限。job 容器加入 `vos_default` 网络，通过 `http://gitea:8080/app/com.ictrek.gitea` 访问实例；默认 job 镜像为 `node:22-bookworm`，离线环境需预置到内网 registry 并调整 runner 标签。裸引用 `uses: owner/repo@ref` 解析为“Gitea 对外访问地址”，该地址使用 HTTPS 时必须提供有效证书。
 
-默认同时启动官方 `gitea-mcp` 服务（服务 `gitea-mcp`），在 `/app/com.ictrek.gitea/mcp` 提供无状态 HTTP 端点，供外部 AI Agent 操作仓库。网关强制校验凭据：`Authorization: Bearer` 必须是 VOS access token 或调用者自己的 Gitea PAT，无效或无凭据返回 `401`。服务端不保存凭据，权限按该用户生效；只开放 repository、file、branch、pull_request、issue 五类工具，创建仓库需 PAT 含 `write:user`。不匹配的 `Origin` 会被拒绝。
+默认同时启动官方 `gitea-mcp` 服务（服务 `gitea-mcp`），在 `/app/com.ictrek.gitea/mcp` 提供无状态 HTTP 端点，供外部 AI Agent 操作仓库。网关强制校验凭据：`Authorization` 必须是 VOS access token 或调用者自己的 Gitea PAT，网关只接受 `Bearer`、`token`、`Basic` 三种写法，前两种等价；无效或无凭据返回 `401`。服务端不保存凭据，权限按该用户生效；只开放 repository、file、branch、pull_request、issue 五类工具，创建仓库需 PAT 含 `write:user`。不匹配的 `Origin` 会被拒绝。
 
 升级保留原路径。本应用不会迁移或删除已安装 GitLab 的账户、仓库或数据。

@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import vm from 'node:vm';
-import {createGateway, BASE, verify, username, upstreamHeaders} from './gateway.mjs';
+import {createGateway, BASE, verify, username, upstreamHeaders, credential} from './gateway.mjs';
 
 test('verified VOS identity is stable across renames and rejects disabled users', async () => {
   let claims = {sub: 'account-1', preferred_username: 'alice', enable: 1, role_code: 'user'};
@@ -17,6 +17,22 @@ test('verified VOS identity is stable across renames and rejects disabled users'
   claims.enable = 0;
   await assert.rejects(verify('token', 'http://userinfo', mock));
   await assert.rejects(verify('', 'http://userinfo', mock));
+});
+
+test('credential shares one parser between proxy and MCP entry points', () => {
+  assert.equal(credential('Bearer abc'), 'abc');
+  assert.equal(credential('token abc'), 'abc'); // gitea-mcp forwards credentials with this scheme
+  assert.equal(credential('bearer abc'), 'abc');
+  assert.equal(credential('TOKEN abc'), 'abc');
+  const basic = value => `Basic ${Buffer.from(value).toString('base64')}`;
+  assert.equal(credential(basic('git:abc')), 'abc');
+  assert.equal(credential(basic('abc:x-oauth-basic')), 'abc');
+  assert.equal(credential(basic('abc:')), 'abc');
+  assert.equal(credential(basic('abc')), 'abc');
+  assert.equal(credential('Digest abc'), '');
+  assert.equal(credential(''), '');
+  assert.equal(credential('Bearer'), '');
+  assert.equal(credential(undefined), '');
 });
 
 test('browser bridge validates OAuth state and follows VOS locale and account changes', async () => {
@@ -59,8 +75,10 @@ test('gateway isolates accounts, validates machine access, rejects CSRF and revo
     return {ok: ['one', 'two'].includes(token), json: async () => ({sub: token, preferred_username: token, enable: enabled ? 1 : 0, role_code: 'user'})};
   };
   const upstream = http.createServer((req, res) => {
-    if (req.headers.authorization) {res.writeHead(401); return res.end();}
-    res.end(JSON.stringify({user: req.headers['x-webauth-user'], url: req.url, language: req.headers['x-vos-language']}));
+    // Gitea accepts its own PATs in both schemes and rejects every other credential
+    const pat = ['Bearer gitea-pat', 'token gitea-pat'].includes(req.headers.authorization);
+    if (req.headers.authorization && !pat) {res.writeHead(401); return res.end();}
+    res.end(JSON.stringify({user: pat ? 'pat' : req.headers['x-webauth-user'], url: req.url, language: req.headers['x-vos-language']}));
   });
   upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
   const gateway = createGateway({userinfoUrl: 'http://userinfo', upstream: `http://127.0.0.1:${upstream.address().port}`, fetcher});
@@ -77,7 +95,16 @@ test('gateway isolates accounts, validates machine access, rejects CSRF and revo
   assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie2}})).status, 200);
   assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Bearer one'}})).status, 200);
   assert.equal((await fetch(base + '/owner/repo.git/info/refs', {headers: {authorization: `Basic ${Buffer.from('git:one').toString('base64')}`}})).status, 200);
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: `Basic ${Buffer.from('one:x-oauth-basic').toString('base64')}`}})).status, 200);
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Digest one'}})).status, 401);
+  // a PAT reaches Gitea untouched instead of being turned into a VOS identity
+  const pat = await fetch(base + '/api/v1/user', {headers: {authorization: 'token gitea-pat'}});
+  assert.equal(pat.status, 200);
+  assert.equal((await pat.json()).user, 'pat');
   assert.equal((await fetch(base + '/api/v1/user', {headers: {'x-webauth-user': 'admin'}})).status, 401);
+  assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Bearer'}})).status, 401);
+  // the locale is stored on the session, so a token caller has nothing to update
+  assert.equal((await fetch(base + '/vos/locale', {method: 'POST', headers: {authorization: 'Bearer one', origin, 'content-type': 'application/json'}, body: '{"locale":"en-US"}'})).status, 403);
   assert.equal((await fetch(base + '/api/v1/repos', {method: 'POST', headers: {cookie: cookie1, origin: 'http://evil.test'}})).status, 403);
   assert.equal((await fetch(base + '/vos/login', {method: 'POST', headers: {origin: 'http://evil.test'}, body: '{}'})).status, 403);
   enabled = false;
@@ -130,6 +157,11 @@ test('MCP endpoint requires a VOS token or a valid Gitea PAT', async t => {
   assert.equal(patBody.authorization, 'Bearer gitea-pat');
   assert.equal(patBody.body, '{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
   assert.equal(vosCalls, 1); // a valid PAT never reaches VOS
+  // Gitea accepts both schemes, so the gateway must parse the token scheme before forwarding it
+  const scheme = await call({authorization: 'token gitea-pat'});
+  assert.equal(scheme.status, 200);
+  assert.equal((await scheme.json()).authorization, 'token gitea-pat');
+  assert.equal(vosCalls, 1);
   const vos = await call({authorization: 'Bearer vos-token'});
   assert.equal(vos.status, 200);
   assert.equal((await vos.json()).authorization, 'Bearer vos-token');
@@ -137,4 +169,9 @@ test('MCP endpoint requires a VOS token or a valid Gitea PAT', async t => {
   const forwarded = await fetch(base + '/api/v1/user', {headers: {authorization: 'token vos-token'}});
   assert.equal(forwarded.status, 200);
   assert.equal((await forwarded.json()).user, username('vos-token'));
+  const basic = `Basic ${Buffer.from('git:vos-token').toString('base64')}`;
+  const wrapped = await call({authorization: basic});
+  assert.equal(wrapped.status, 200);
+  assert.equal((await wrapped.json()).authorization, basic);
+  assert.equal((await call({authorization: 'Digest vos-token'})).status, 401);
 });

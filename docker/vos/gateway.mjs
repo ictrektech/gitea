@@ -41,29 +41,37 @@ export function upstreamHeaders(req, user, locale) {
     'x-webauth-user': user.username, 'x-webauth-email': `${user.username}@vos.invalid`, 'x-vos-subject': user.subject,
     'x-vos-username': encodeURIComponent(user.preferredUsername || ''), 'x-vos-display-name': encodeURIComponent(user.name), 'x-vos-admin': String(user.admin), 'x-vos-language': locale || ''};
 }
+export function credential(authorization) {
+  const [scheme, value = ''] = String(authorization || '').split(' ');
+  if (!value) return '';
+  const method = scheme.toLowerCase();
+  if (!['bearer', 'token', 'basic'].includes(method)) return '';
+  if (method !== 'basic') return value;
+  const decoded = Buffer.from(value, 'base64').toString();
+  const colon = decoded.indexOf(':');
+  if (colon < 0) return decoded;
+  const name = decoded.slice(0, colon), pass = decoded.slice(colon + 1);
+  return pass === '' || pass === 'x-oauth-basic' ? name : pass; // Gitea reads the username as the token for these forms
+}
 export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', mcpUpstream = 'http://gitea-mcp:8080', fetcher = fetch}) {
   const sessions = new Map();
   const id = req => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === 'gitea_vos_session')?.[1];
   const json = (res, data) => respond(res, 200, JSON.stringify(data), 'application/json');
   const cookie = (req, value, age = 43200) => `gitea_vos_session=${value}; Path=${BASE}/; HttpOnly; SameSite=Strict; Max-Age=${age}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`;
-  async function identity(req) {
-    if (req.headers.authorization) {
-      let token;
-      if (req.headers.authorization.startsWith('Bearer ')) token = req.headers.authorization.slice(7);
-      else if (req.headers.authorization.startsWith('token ')) token = req.headers.authorization.slice(6); // gitea-mcp forwards credentials with this scheme; dropping it loses VOS tokens
-      else if (req.headers.authorization.startsWith('Basic ')) {
-        const value = Buffer.from(req.headers.authorization.slice(6), 'base64').toString();
-        token = value.slice(value.indexOf(':') + 1);
-      }
-      try { return {user: await verify(token, userinfoUrl, fetcher), machine: true}; }
-      catch { return {machine: true}; }
+  // kind names who the request is; a PAT stays unverified here and is forwarded for Gitea to judge
+  async function authenticate(req) {
+    const token = credential(req.headers.authorization);
+    if (token) {
+      try { return {kind: 'vos', user: await verify(token, userinfoUrl, fetcher)}; }
+      catch { return {kind: 'pat'}; }
     }
+    if (req.headers.authorization) throw Error('Invalid credential');
     const session = sessions.get(id(req));
     if (!session || session.expires < Date.now()) { sessions.delete(id(req)); throw Error('Session required'); }
     try {
       const user = await verify(session.token, userinfoUrl, fetcher);
       if (user.subject !== session.subject) throw Error('Identity changed');
-      return {user, locale: session.locale, machine: false};
+      return {kind: 'session', user, locale: session.locale};
     } catch (e) { sessions.delete(id(req)); throw e; }
   }
   const server = http.createServer(async (req, res) => {
@@ -78,21 +86,13 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
       if (path === '/mcp') {
         // Keeps MCP from running for anonymous callers; the sidecar stores no credentials itself.
         if (req.method !== 'POST') return respond(res, 405, 'Method not allowed');
+        const deny = () => { res.setHeader('www-authenticate', 'Bearer'); return respond(res, 401, 'VOS token or Gitea PAT required'); };
         const authorization = String(req.headers.authorization || '');
-        const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
-        if (!token) {
-          res.setHeader('www-authenticate', 'Bearer');
-          return respond(res, 401, 'VOS token or Gitea PAT required');
-        }
+        const token = credential(authorization);
+        if (!token) return deny();
         // PATs are cheap to check locally; VOS is only asked when Gitea rejects the credential.
         const pat = await fetcher(`${upstream}${BASE}/api/v1/user`, {headers: {authorization}, redirect: 'error', signal: AbortSignal.timeout(10000)}).catch(() => null);
-        if (!pat?.ok) {
-          const vos = await verify(token, userinfoUrl, fetcher).then(() => true, () => false);
-          if (!vos) {
-            res.setHeader('www-authenticate', 'Bearer');
-            return respond(res, 401, 'VOS token or Gitea PAT required');
-          }
-        }
+        if (!pat?.ok && !await verify(token, userinfoUrl, fetcher).then(() => true, () => false)) return deny();
         const headers = Object.fromEntries(Object.entries(req.headers).filter(([key]) => !HOP.has(key)));
         // Authorization stays untouched, the sidecar forwards it to Gitea for per-user tool permissions.
         const proxy = http.request(new URL('/mcp', mcpUpstream), {method: 'POST', headers: {...headers, host: req.headers.host}}, mcpRes => {
@@ -123,7 +123,8 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
       }
       let auth;
       try {
-        auth = /^\/(api\/actions\/|api\/actions_pipeline\/|twirp\/github\.actions\.)/.test(path) ? {machine: true} : await identity(req);
+        // Actions calls carry their own runner token and must not be authenticated by the gateway
+        auth = /^\/(api\/actions\/|api\/actions_pipeline\/|twirp\/github\.actions\.)/.test(path) ? {kind: 'actions'} : await authenticate(req);
       }
       catch {
         if (req.method === 'GET' && req.headers.accept?.includes('text/html') && !path.startsWith('/api/')) {
@@ -131,11 +132,11 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         }
         res.setHeader('www-authenticate', 'Basic realm="VOS access token"'); return respond(res, 401, 'VOS authentication required');
       }
-      if (!auth.machine && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !sameOrigin(req)) return respond(res, 403);
+      if (auth.kind === 'session' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !sameOrigin(req)) return respond(res, 403);
       if (path.startsWith('/vos/') && !auth.user) return respond(res, 401);
       if (path === '/vos/session') return json(res, {username: auth.user.username});
       if (path === '/vos/locale') {
-        if (req.method !== 'POST' || !sameOrigin(req)) return respond(res, 403);
+        if (req.method !== 'POST' || !sameOrigin(req) || auth.kind !== 'session') return respond(res, 403);
         sessions.get(id(req)).locale = language((await body(req)).locale); return respond(res, 204);
       }
       if (path === '/integration-guide' && req.method === 'GET') return respond(res, 200, (await readFile(new URL('guide.html', ROOT), 'utf8')).replace('__LANG__', auth.locale || 'en-US'), 'text/html; charset=utf-8');
@@ -153,13 +154,13 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
   server.on('upgrade', async (req, socket, head) => {
     try {
       if (!req.url.startsWith(`${BASE}/`) || !sameOrigin(req)) throw Error('Forbidden');
-      const auth = await identity(req);
+      const auth = await authenticate(req);
       const proxy = http.request(new URL(req.url, upstream), {headers: {...upstreamHeaders(req, auth.user, auth.locale), connection: 'Upgrade', upgrade: 'websocket'}});
       proxy.on('upgrade', (r, remote, upstreamHead) => {
         socket.write(`HTTP/1.1 101 Switching Protocols\r\n${Object.entries(r.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n\r\n`);
         if (head.length) remote.write(head); if (upstreamHead.length) socket.write(upstreamHead);
         remote.pipe(socket); socket.pipe(remote);
-        const check = setInterval(() => { identity(req).catch(() => { remote.destroy(); socket.destroy(); }); }, 15000);
+        const check = setInterval(() => { authenticate(req).catch(() => { remote.destroy(); socket.destroy(); }); }, 15000);
         socket.on('close', () => { clearInterval(check); remote.destroy(); }); remote.on('error', () => socket.destroy());
       });
       proxy.on('response', () => socket.destroy()); proxy.on('error', () => socket.destroy()); proxy.end();
