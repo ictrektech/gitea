@@ -37,10 +37,10 @@ test('credential shares one parser between proxy and MCP entry points', () => {
 
 test('browser bridge validates OAuth state and follows VOS locale and account changes', async () => {
   const script = await readFile(new URL('./bridge.js', import.meta.url), 'utf8');
-  async function browser(validState, cookie = '') {
+  async function browser(validState, cookie = '', pageLang = 'en-US') {
     const events = {}, requests = [], locations = [];
     const oauth = {authorize: async p => ({code: 'code', state: validState ? p.state : 'forged'}), token: async () => ({access_token: 'verified-token'})};
-    const document = {cookie, getElementById: () => null, documentElement: {lang: 'en-US', dataset: {}}, querySelectorAll: () => [], body: {style: {}, replaceChildren: () => {}}, createElement: () => ({})};
+    const document = {cookie, getElementById: () => null, documentElement: {lang: pageLang, dataset: {}}, querySelectorAll: () => [], body: {style: {}, replaceChildren: () => {}}, createElement: () => ({})};
     const window = {vos_platform: {api: {v1000: {oauth2: oauth}}, getState: async () => ({locale: 'en', theme: 'dark'}), broadcast: {on: (name, cb) => {events[name] = cb; return () => {};}}}, addEventListener: () => {}};
     const location = {href: 'https://vos.test/app/com.ictrek.gitea/', replace: value => locations.push(String(value)), reload: () => locations.push('reload')};
     await vm.runInNewContext(script, {window, document, location, URL, crypto: webcrypto, TextEncoder, Uint8Array, btoa, setTimeout, setInterval: () => 1, clearInterval: () => {}, fetch: async (path, options) => {requests.push({path, ...options}); return {ok: true, json: async () => ({changed: false})};}});
@@ -56,6 +56,8 @@ test('browser bridge validates OAuth state and follows VOS locale and account ch
   await fixedLocale.events['locale-change']({locale: 'zh-CN'});
   assert.equal(fixedLocale.locations.length, 0);
   assert.equal(fixedLocale.requests.at(-1).path, BASE + '/vos/locale');
+  const keptLocale = await browser(true, '', 'zh-CN');
+  assert.equal(keptLocale.locations.length, 0, 'a language chosen by the user must survive the login poll');
   await good.events['user-change']({user: null});
   assert.equal(good.document.body.style.visibility, 'hidden');
   assert.equal(good.requests.at(-1).path, BASE + '/vos/logout');

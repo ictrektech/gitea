@@ -35,7 +35,8 @@
         const session = await r.json();
         const lang = locale(platform.locale);
         const follow = followLocale();
-        if (status || session.changed || (follow && document.documentElement.lang !== lang)) {
+        // Only the first load and an account switch apply the platform language. A user's own choice stays until the platform language changes.
+        if (status || session.changed) {
           const url = new URL(location.href);
           if (follow) url.searchParams.set('lang', lang);
           location.replace(url); return;
