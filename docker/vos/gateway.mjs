@@ -145,7 +145,7 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         res.setHeader('location', to.startsWith(`${BASE}/`) ? to : `${BASE}/`);
         return respond(res, 302, 'VOS authentication required');
       }
-      if (auth.locale && req.method === 'GET') url.searchParams.set('lang', auth.locale);
+      // The page keeps the language the user chose; the bridge sends lang= only when the user follows VOS.
       const target = new URL(url.pathname + url.search, upstream);
       const proxy = http.request(target, {method: req.method, headers: upstreamHeaders(req, auth.user, auth.locale)}, upstreamRes => {
         const headers = Object.fromEntries(Object.entries(upstreamRes.headers).filter(([key]) => !HOP.has(key)));

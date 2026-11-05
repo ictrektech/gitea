@@ -24,4 +24,7 @@ const (
 	SettingEmailNotificationGiteaActionsDisabled    = "disabled"
 
 	SettingsKeyActionsConfig = "actions.config"
+
+	// SettingsKeyFollowVOSLocale controls whether a VOS locale change also changes the user's Gitea language
+	SettingsKeyFollowVOSLocale = "ui.follow_vos_locale"
 )

@@ -53,6 +53,13 @@
 						</div>
 					</div>
 				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="follow" type="checkbox" value="true" {{if .FollowVOSLocale}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.follow_vos_locale"}}</label>
+					</div>
+				</div>
+				<p class="help">{{ctx.Locale.Tr "settings.follow_vos_locale_desc"}}</p>
 				<div class="field">
 					<button type="submit" class="ui primary button">{{ctx.Locale.Tr "settings.update_language"}}</button>
 				</div>

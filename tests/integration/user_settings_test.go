@@ -10,6 +10,7 @@ import (
 
 	auth_model "gitea.dev/models/auth"
 	"gitea.dev/models/unittest"
+	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/container"
 	"gitea.dev/modules/setting"
 	"gitea.dev/modules/test"
@@ -397,4 +398,34 @@ func TestUserSettingsSecrets(t *testing.T) {
 	} else {
 		session.MakeRequest(t, req, http.StatusNotFound)
 	}
+}
+
+func TestUserSettingsUpdateLanguageFollow(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
+	session := loginUser(t, "user2")
+
+	req := NewRequest(t, "GET", "/user/settings/appearance")
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	doc := NewHTMLParser(t, resp.Body)
+	_, checked := doc.Find(`input[name="follow"]`).Attr("checked")
+	assert.True(t, checked)
+	assert.Equal(t, "true", session.GetSiteCookie("vos_follow_locale"))
+
+	req = NewRequestWithValues(t, "POST", "/user/settings/appearance/language", map[string]string{
+		"language": "en-US",
+	})
+	session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "false", session.GetSiteCookie("vos_follow_locale"))
+
+	value, err := user_model.GetUserSetting(t.Context(), user.ID, user_model.SettingsKeyFollowVOSLocale)
+	assert.NoError(t, err)
+	assert.Equal(t, "false", value)
+
+	req = NewRequest(t, "GET", "/user/settings/appearance")
+	resp = session.MakeRequest(t, req, http.StatusOK)
+	doc = NewHTMLParser(t, resp.Body)
+	_, checked = doc.Find(`input[name="follow"]`).Attr("checked")
+	assert.False(t, checked)
 }

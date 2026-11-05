@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gitea.dev/models/db"
@@ -330,17 +331,31 @@ func Appearance(ctx *context.Context) {
 	ctx.Data["PageIsSettingsAppearance"] = true
 	ctx.Data["AllThemes"] = webtheme.GetAvailableThemes()
 
-	var hiddenCommentTypes *big.Int
-	val, err := user_model.GetUserSetting(ctx, ctx.Doer.ID, user_model.SettingsKeyHiddenCommentTypes)
+	settings, err := user_model.GetSettings(ctx, ctx.Doer.ID, []string{
+		user_model.SettingsKeyHiddenCommentTypes,
+		user_model.SettingsKeyFollowVOSLocale,
+	})
 	if err != nil {
-		ctx.ServerError("GetUserSetting", err)
+		ctx.ServerError("GetSettings", err)
 		return
 	}
-	hiddenCommentTypes, _ = new(big.Int).SetString(val, 10) // we can safely ignore the failed conversion here
+
+	var hiddenCommentTypes *big.Int
+	if s := settings[user_model.SettingsKeyHiddenCommentTypes]; s != nil {
+		hiddenCommentTypes, _ = new(big.Int).SetString(s.SettingValue, 10) // we can safely ignore the failed conversion here
+	}
 
 	ctx.Data["IsCommentTypeGroupChecked"] = func(commentTypeGroup string) bool {
 		return forms.IsUserHiddenCommentTypeGroupChecked(commentTypeGroup, hiddenCommentTypes)
 	}
+
+	follow := "true"
+	if s := settings[user_model.SettingsKeyFollowVOSLocale]; s != nil {
+		follow = s.SettingValue
+	}
+	// Keep the page script in step with a choice made in another browser or after cookies were cleared.
+	setVOSFollowCookie(ctx, follow)
+	ctx.Data["FollowVOSLocale"] = follow != "false"
 
 	ctx.HTML(http.StatusOK, tplSettingsAppearance)
 }
@@ -397,12 +412,33 @@ func UpdateUserLang(ctx *context.Context) {
 		return
 	}
 
+	follow := strconv.FormatBool(ctx.FormString("follow") == "true")
+	if err := user_model.SetUserSetting(ctx, ctx.Doer.ID, user_model.SettingsKeyFollowVOSLocale, follow); err != nil {
+		ctx.ServerError("SetUserSetting", err)
+		return
+	}
+	setVOSFollowCookie(ctx, follow)
+
 	// Update the language to the one we just set
 	middleware.SetLocaleCookie(ctx.Resp, ctx.Doer.Language, 0)
 
 	log.Trace("User settings updated: %s", ctx.Doer.Name)
 	ctx.Flash.Success(translation.NewLocale(ctx.Doer.Language).TrString("settings.update_language_success"))
 	ctx.Redirect(setting.AppSubURL + "/user/settings/appearance")
+}
+
+// cookieVOSFollowLocale mirrors the follow setting for the page script, so it must not be HttpOnly.
+const cookieVOSFollowLocale = "vos_follow_locale"
+
+func setVOSFollowCookie(ctx *context.Context, value string) {
+	http.SetCookie(ctx.Resp, &http.Cookie{
+		Name:     cookieVOSFollowLocale,
+		Value:    value,
+		MaxAge:   1<<31 - 1,
+		Path:     util.IfZero(setting.SessionConfig.CookiePath, "/"),
+		Secure:   setting.SessionConfig.Secure,
+		SameSite: setting.SessionConfig.SameSite,
+	})
 }
 
 // UpdateUserHiddenComments update a user's shown comment types

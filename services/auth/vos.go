@@ -21,6 +21,7 @@ import (
 	user_model "gitea.dev/models/user"
 	"gitea.dev/modules/json"
 	"gitea.dev/modules/optional"
+	"gitea.dev/modules/util"
 	"gitea.dev/services/audit"
 	user_service "gitea.dev/services/user"
 
@@ -88,7 +89,7 @@ func (r *ReverseProxy) getVOSUser(req *http.Request) (*user_model.User, error) {
 			}
 		}
 		if !found {
-			u = &user_model.User{Name: handle, LoginName: binding, Email: legacy + "@vos.invalid"}
+			u = &user_model.User{Name: handle, LoginName: binding, Email: legacy + "@vos.invalid", Language: vosLanguage(req)}
 			options := user_model.CreateUserOverwriteOptions{IsActive: optional.Some(true), KeepEmailPrivate: optional.Some(true)}
 			if err := user_model.CreateUser(ctx, u, &user_model.Meta{}, &options); err != nil {
 				return nil, err
@@ -106,23 +107,53 @@ func (r *ReverseProxy) getVOSUser(req *http.Request) (*user_model.User, error) {
 	return u, nil
 }
 
+// vosLanguage returns the platform language only when Gitea serves it.
+func vosLanguage(req *http.Request) string {
+	lang := req.Header.Get("X-VOS-Language")
+	if lang == "en-US" || lang == "zh-CN" || lang == "zh-TW" {
+		return lang
+	}
+	return ""
+}
+
+// vosFollowsLocale reports whether a platform locale change also changes the user's language.
+func vosFollowsLocale(ctx context.Context, userID int64) (bool, error) {
+	val, err := user_model.GetSetting(ctx, userID, user_model.SettingsKeyFollowVOSLocale)
+	if err != nil {
+		if errors.Is(err, util.ErrNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	return val != "false", nil
+}
+
 func syncVOSUser(req *http.Request, user *user_model.User) error {
 	name, err := url.PathUnescape(req.Header.Get("X-VOS-Display-Name"))
 	if err != nil {
 		return err
 	}
 	admin := req.Header.Get("X-VOS-Admin") == "true"
-	lang := req.Header.Get("X-VOS-Language")
+	follow, err := vosFollowsLocale(req.Context(), user.ID)
+	if err != nil {
+		return err
+	}
+	lang := ""
+	if follow {
+		lang = vosLanguage(req)
+	}
 	if name == user.FullName && admin == user.IsAdmin && (lang == "" || lang == user.Language) {
 		return nil
 	}
 	user.FullName = name
 	// VOS owns this role even when the user is Gitea's last administrator.
 	user.IsAdmin = admin
-	if lang == "en-US" || lang == "zh-CN" || lang == "zh-TW" {
+	cols := []string{"full_name", "is_admin"}
+	if lang != "" {
 		user.Language = lang
+		cols = append(cols, "language")
 	}
-	return user_model.UpdateUserCols(req.Context(), user, "full_name", "is_admin", "language")
+	return user_model.UpdateUserCols(req.Context(), user, cols...)
 }
 
 // ValidateVOSUser keeps native PAT and SSH authentication subject to current VOS account state.

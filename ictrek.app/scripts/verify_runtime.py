@@ -130,10 +130,17 @@ const token=(req.headers.authorization||'').replace('Bearer ','');
         code, data, headers = request(base, '/vos/login', payload={'access_token': 'alice', 'locale': 'zh-CN'}, origin=host)
         assert code == 200
         cookie = headers['Set-Cookie'].split(';')[0]
-        code, html, _ = request(base, '/', cookie=cookie)
+        code, html, _ = request(base, '/?lang=zh-CN', cookie=cookie)
         assert code == 200 and b'lang="zh-CN"' in html and b'/vos/bridge.js' in html
         code, data, _ = request(base, '/api/v1/user', cookie=cookie)
         assert code == 200 and json.loads(data)['language'] == 'zh-CN'
+        code, html, headers = request(base, '/?lang=en-US', cookie=cookie)
+        assert code == 200 and b'lang="en-US"' in html
+        lang_cookie = [c for c in headers.get_all('Set-Cookie') or [] if c.startswith('lang=') and not c.startswith('lang=;')][-1].split(';')[0]
+        code, html, _ = request(base, '/', cookie=f'{cookie}; {lang_cookie}')
+        assert code == 200 and b'lang="en-US"' in html, 'the chosen language must survive without ?lang'
+        code, html, _ = request(base, '/?lang=zh-CN', cookie=cookie)
+        assert code == 200 and b'lang="zh-CN"' in html
         assert request(base, '/integration-guide', cookie=cookie)[0] == 200
         code, repo, _ = request(base, '/api/v1/user/repos', 'alice', {'name': 'vos-private-proof', 'private': True, 'auto_init': True})
         assert code == 201, (code, repo[:300])

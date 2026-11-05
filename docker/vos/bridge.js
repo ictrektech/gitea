@@ -1,6 +1,8 @@
 (async () => {
   const BASE = '/app/com.ictrek.gitea';
   const locale = value => /^zh-(tw|hk|hant)/i.test(value || '') ? 'zh-TW' : /^zh/i.test(value || '') ? 'zh-CN' : 'en-US';
+  // The settings page mirrors the user's choice into this cookie.
+  const followLocale = () => !String(document.cookie || '').split(';').map(x => x.trim()).includes('vos_follow_locale=false');
   let bridge;
   for (let i = 0; i < 100; i++) {
     bridge = window.vos_platform;
@@ -32,8 +34,11 @@
         if (!r.ok) throw Error('Login failed');
         const session = await r.json();
         const lang = locale(platform.locale);
-        if (status || session.changed || document.documentElement.lang !== lang) {
-          const url = new URL(location.href); url.searchParams.set('lang', lang); location.replace(url); return;
+        const follow = followLocale();
+        if (status || session.changed || (follow && document.documentElement.lang !== lang)) {
+          const url = new URL(location.href);
+          if (follow) url.searchParams.set('lang', lang);
+          location.replace(url); return;
         }
         document.documentElement.dataset.theme = platform.theme === 'dark' ? 'gitea-dark' : 'gitea-light';
         document.querySelectorAll('[data-guide-lang]').forEach(el => { el.hidden = el.dataset.guideLang !== (lang.startsWith('zh') ? 'zh' : 'en'); });
@@ -43,6 +48,7 @@
       try {
         const r = await fetch(`${BASE}/vos/locale`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({locale: state.locale})});
         if (!r.ok) throw Error('Locale failed');
+        if (!followLocale()) return;
         const url = new URL(location.href); url.searchParams.set('lang', locale(state.locale)); location.replace(url);
       } catch { error(); }
     }), bridge.broadcast?.on('theme-change', state => { document.documentElement.dataset.theme = state.theme === 'dark' ? 'gitea-dark' : 'gitea-light'; }), bridge.broadcast?.on('user-change', async () => {
