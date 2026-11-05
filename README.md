@@ -78,7 +78,7 @@ python3 ictrek.app/scripts/verify_runtime.py --image <候选镜像> --postgres-i
 1. 提交、推送源码，然后提交、推送 VAI 子模块引用。
 2. 分别构建、验证和推送 AMD64 / ARM64 镜像，确认飞书 `AMD_with_cuda` / `ARM_without_cuda` 的 `gitea` 列。
 3. 本地运行 `./ictrek.app/scripts/update_version.sh`，仅递增 VOS 修订号并推送 `vos-gitea-v<version>`。
-4. GitHub Actions 从飞书读取镜像，验证 pull 包，创建 `v<version>` Release，再通过 SSH tunnel 发布 VOS App Store。打包输出在 `~/dev/build/gitea/ictrek.app`。
+4. GitHub Actions 从飞书读取镜像，验证 pull 包，创建预发布 `v<version>` Release，再通过 SSH tunnel 以 `rolling` 渠道发布 VOS App Store；正式版需在商店管理台把该版本提升到 `stable`。打包输出在 `~/dev/build/gitea/ictrek.app`。
 5. 检查 workflow、Release 资产与商店记录；在目标 VOS 检查真实页面/API。更新并推送最终 VAI 引用。
 
 Secrets 为 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`APPSTORE_IP`、`APPSTORE_TOKEN`。固定飞书文档 ID `Htotsn3oahO1zxt73YMcaB1zn8e` 不属于 Secret。构建机认证从 `~/.feishu.components.json` 或 `~/.feishu.json` 读取，凭据不进入源码或日志。
