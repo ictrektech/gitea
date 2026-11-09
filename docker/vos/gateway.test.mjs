@@ -37,25 +37,31 @@ test('credential shares one parser between proxy and MCP entry points', () => {
 
 test('browser bridge validates OAuth state and follows VOS locale and account changes', async () => {
   const script = await readFile(new URL('./bridge.js', import.meta.url), 'utf8');
-  async function browser(validState, cookie = '') {
-    const events = {}, requests = [], locations = [];
+  async function browser(validState, cookie = '', pageLang = 'en-US', pageUrl = 'https://vos.test/app/com.ictrek.gitea/') {
+    const events = {}, requests = [], locations = [], replaced = [];
     const oauth = {authorize: async p => ({code: 'code', state: validState ? p.state : 'forged'}), token: async () => ({access_token: 'verified-token'})};
-    const document = {cookie, getElementById: () => null, documentElement: {lang: 'en-US', dataset: {}}, querySelectorAll: () => [], body: {style: {}, replaceChildren: () => {}}, createElement: () => ({})};
+    const document = {cookie, getElementById: () => null, documentElement: {lang: pageLang, dataset: {}}, querySelectorAll: () => [], body: {style: {}, replaceChildren: () => {}}, createElement: () => ({})};
     const window = {vos_platform: {api: {v1000: {oauth2: oauth}}, getState: async () => ({locale: 'en', theme: 'dark'}), broadcast: {on: (name, cb) => {events[name] = cb; return () => {};}}}, addEventListener: () => {}};
-    const location = {href: 'https://vos.test/app/com.ictrek.gitea/', replace: value => locations.push(String(value)), reload: () => locations.push('reload')};
-    await vm.runInNewContext(script, {window, document, location, URL, crypto: webcrypto, TextEncoder, Uint8Array, btoa, setTimeout, setInterval: () => 1, clearInterval: () => {}, fetch: async (path, options) => {requests.push({path, ...options}); return {ok: true, json: async () => ({changed: false})};}});
-    return {events, requests, locations, document};
+    const location = {href: pageUrl, replace: value => locations.push(String(value)), reload: () => locations.push('reload')};
+    await vm.runInNewContext(script, {window, document, location, URL, history: {replaceState: (...args) => replaced.push(args)}, crypto: webcrypto, TextEncoder, Uint8Array, btoa, setTimeout, setInterval: () => 1, clearInterval: () => {}, fetch: async (path, options) => {requests.push({path, ...options}); return {ok: true, json: async () => ({changed: false})};}});
+    return {events, requests, locations, document, replaced};
   }
   const good = await browser(true);
   assert.equal(good.requests[0].path, BASE + '/vos/login');
   assert.equal(JSON.parse(good.requests[0].body).access_token, 'verified-token');
   assert.equal(good.document.documentElement.dataset.theme, 'gitea-dark');
   await good.events['locale-change']({locale: 'zh-CN'});
-  assert.match(good.locations[0], /lang=zh-CN/);
+  assert.equal(good.requests.at(-1).path, BASE + '/vos/locale');
+  assert.equal(good.locations.length, 0, 'the platform reloads after a locale change, so the bridge must not');
+  assert.match(good.document.cookie, /vos_locale=zh-CN/, 'the reload reads the new language from the cookie');
   const fixedLocale = await browser(true, 'vos_follow_locale=false');
   await fixedLocale.events['locale-change']({locale: 'zh-CN'});
   assert.equal(fixedLocale.locations.length, 0);
   assert.equal(fixedLocale.requests.at(-1).path, BASE + '/vos/locale');
+  const followedLocale = await browser(true, '', 'zh-CN');
+  assert.equal(followedLocale.locations[0], 'reload', 'following the platform reloads when the platform did not');
+  const staleUrl = await browser(true, '', 'zh-CN', `https://vos.test${BASE}/?lang=zh-CN`);
+  assert.equal(String(staleUrl.replaced[0][2]), 'https://vos.test/app/com.ictrek.gitea/', 'a stale ?lang= must not stay in the address');
   await good.events['user-change']({user: null});
   assert.equal(good.document.body.style.visibility, 'hidden');
   assert.equal(good.requests.at(-1).path, BASE + '/vos/logout');
@@ -96,6 +102,13 @@ test('gateway isolates accounts, validates machine access, rejects CSRF and revo
   assert.notEqual(cookie1, cookie2);
   const r = await fetch(base + '/api/v1/user', {headers: {cookie: cookie1, 'x-webauth-user': 'admin'}});
   assert.deepEqual(await r.json(), {user: username('one'), url: BASE + '/api/v1/user', language: 'zh-CN'});
+  // A page the platform reloads itself is served in the language it just switched to.
+  const page = await fetch(base + '/', {headers: {cookie: cookie1, accept: 'text/html'}});
+  assert.equal((await page.json()).url, `${BASE}/?lang=zh-CN`);
+  const switched = await fetch(base + '/', {headers: {cookie: `${cookie1}; vos_locale=zh-TW`, accept: 'text/html'}});
+  assert.equal((await switched.json()).url, `${BASE}/?lang=zh-TW`, 'the language the bridge mirrored wins over the login one');
+  const fixedPage = await fetch(base + '/', {headers: {cookie: `${cookie1}; vos_follow_locale=false`, accept: 'text/html'}});
+  assert.equal((await fixedPage.json()).url, BASE + '/', 'a language the user fixed is never overridden');
   assert.equal((await fetch(base + '/api/v1/user', {headers: {cookie: cookie2}})).status, 200);
   assert.equal((await fetch(base + '/api/v1/user', {headers: {authorization: 'Bearer one'}})).status, 200);
   assert.equal((await fetch(base + '/owner/repo.git/info/refs', {headers: {authorization: `Basic ${Buffer.from('git:one').toString('base64')}`}})).status, 200);

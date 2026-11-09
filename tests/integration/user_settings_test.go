@@ -406,13 +406,15 @@ func TestUserSettingsUpdateLanguageFollow(t *testing.T) {
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
 	session := loginUser(t, "user2")
 
+	// The automatic option is selected by default.
 	req := NewRequest(t, "GET", "/user/settings/appearance")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	doc := NewHTMLParser(t, resp.Body)
-	_, checked := doc.Find(`input[name="follow"]`).Attr("checked")
-	assert.True(t, checked)
+	selected, _ := doc.Find(`#language .item.active.selected`).Attr("data-value")
+	assert.Equal(t, "auto", selected)
 	assert.Equal(t, "true", session.GetSiteCookie("vos_follow_locale"))
 
+	// A fixed language is stored and stops following the platform.
 	req = NewRequestWithValues(t, "POST", "/user/settings/appearance/language", map[string]string{
 		"language": "en-US",
 	})
@@ -426,6 +428,13 @@ func TestUserSettingsUpdateLanguageFollow(t *testing.T) {
 	req = NewRequest(t, "GET", "/user/settings/appearance")
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	doc = NewHTMLParser(t, resp.Body)
-	_, checked = doc.Find(`input[name="follow"]`).Attr("checked")
-	assert.False(t, checked)
+	selected, _ = doc.Find(`#language .item.active.selected`).Attr("data-value")
+	assert.Equal(t, "en-US", selected)
+
+	// The automatic option restores following.
+	req = NewRequestWithValues(t, "POST", "/user/settings/appearance/language", map[string]string{
+		"language": "auto",
+	})
+	session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "true", session.GetSiteCookie("vos_follow_locale"))
 }

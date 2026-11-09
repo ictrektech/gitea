@@ -91,7 +91,7 @@ jobs:
           fi
           gh release create "$PUBLIC_TAG" "$HOME/dev/build/gitea/ictrek.app/gitea_${VERSION}_pull.tar" \
             --verify-tag \
-            --latest \
+            --prerelease \
             --title "v${VERSION}" \
             --notes-file release-notes.md
 
@@ -179,7 +179,7 @@ jobs:
           done
           [[ "$ready" == true ]] || { echo "VOS App Store SSH tunnel did not become ready." >&2; exit 1; }
 
-          publish_response="$(curl -kfsS -F "package=@${PACKAGE}" -F "force=true" -F "channel=stable" "http://127.0.0.1:18899/api/appstore/apps")" \
+          publish_response="$(curl -kfsS -F "package=@${PACKAGE}" -F "force=true" -F "channel=rolling" "http://127.0.0.1:18899/api/appstore/apps")" \
             || publish_response="$(curl -kfsS -F "package=@${PACKAGE}" -F "force=true" "http://127.0.0.1:18899/api/appstore/apps")"
           RESPONSE="$publish_response" python3 - <<'PY'
           import json

@@ -43,23 +43,17 @@
 			<form class="ui form" action="{{.Link}}/language" method="post">
 				<div class="field">
 					<div class="ui language selection dropdown" id="language">
-						<input name="language" type="hidden" value="{{.SignedUser.Language}}">
+						<input name="language" type="hidden" value="{{if .FollowVOSLocale}}auto{{else}}{{.SignedUser.Language}}{{end}}">
 						{{svg "octicon-triangle-down" 14 "dropdown icon"}}
-						<div class="text">{{range .AllLangs}}{{if eq $.SignedUser.Language .Lang}}{{.Name}}{{end}}{{end}}</div>
+						<div class="text">{{if .FollowVOSLocale}}{{ctx.Locale.Tr "settings.follow_vos_locale"}}{{else}}{{range .AllLangs}}{{if eq $.SignedUser.Language .Lang}}{{.Name}}{{end}}{{end}}{{end}}</div>
 						<div class="menu">
+							<div class="item{{if .FollowVOSLocale}} active selected{{end}}" data-value="auto">{{ctx.Locale.Tr "settings.follow_vos_locale"}}</div>
 						{{range .AllLangs}}
-							<div class="item{{if eq $.SignedUser.Language .Lang}} active selected{{end}}" data-value="{{.Lang}}">{{.Name}}</div>
+							<div class="item{{if and (not $.FollowVOSLocale) (eq $.SignedUser.Language .Lang)}} active selected{{end}}" data-value="{{.Lang}}">{{.Name}}</div>
 						{{end}}
 						</div>
 					</div>
 				</div>
-				<div class="inline field">
-					<div class="ui checkbox">
-						<input name="follow" type="checkbox" value="true" {{if .FollowVOSLocale}}checked{{end}}>
-						<label>{{ctx.Locale.Tr "settings.follow_vos_locale"}}</label>
-					</div>
-				</div>
-				<p class="help">{{ctx.Locale.Tr "settings.follow_vos_locale_desc"}}</p>
 				<div class="field">
 					<button type="submit" class="ui primary button">{{ctx.Locale.Tr "settings.update_language"}}</button>
 				</div>

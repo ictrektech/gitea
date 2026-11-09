@@ -41,6 +41,15 @@ export function upstreamHeaders(req, user, locale) {
     'x-webauth-user': user.username, 'x-webauth-email': `${user.username}@vos.invalid`, 'x-vos-subject': user.subject,
     'x-vos-username': encodeURIComponent(user.preferredUsername || ''), 'x-vos-display-name': encodeURIComponent(user.name), 'x-vos-admin': String(user.admin), 'x-vos-language': locale || ''};
 }
+// The bridge mirrors the follow choice and the platform language into cookies, so a reload
+// started by the platform itself already renders in the language it just switched to.
+export function followsLocale(req) {
+  return !String(req.headers.cookie || '').split(';').map(x => x.trim()).includes('vos_follow_locale=false');
+}
+export function cookieLocale(req) {
+  const raw = String(req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('vos_locale='))?.slice('vos_locale='.length);
+  return ['en-US', 'zh-CN', 'zh-TW'].includes(raw) ? raw : '';
+}
 export function credential(authorization) {
   const [scheme, value = ''] = String(authorization || '').split(' ');
   if (!value) return '';
@@ -145,9 +154,15 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         res.setHeader('location', to.startsWith(`${BASE}/`) ? to : `${BASE}/`);
         return respond(res, 302, 'VOS authentication required');
       }
-      // The page keeps the language the user chose; the bridge sends lang= only when the user follows VOS.
+      // A language the user fixed stays; following the platform hands its language to Gitea on every page load.
+      const follow = followsLocale(req);
+      const locale = follow ? cookieLocale(req) || auth.locale : auth.locale;
       const target = new URL(url.pathname + url.search, upstream);
-      const proxy = http.request(target, {method: req.method, headers: upstreamHeaders(req, auth.user, auth.locale)}, upstreamRes => {
+      // Handing the language to Gitea keeps the platform's own reload the only one.
+      if (follow && locale && req.method === 'GET' && String(req.headers.accept || '').includes('text/html') && !url.searchParams.has('lang')) {
+        target.searchParams.set('lang', locale);
+      }
+      const proxy = http.request(target, {method: req.method, headers: upstreamHeaders(req, auth.user, locale)}, upstreamRes => {
         const headers = Object.fromEntries(Object.entries(upstreamRes.headers).filter(([key]) => !HOP.has(key)));
         res.writeHead(upstreamRes.statusCode, {...headers, 'cache-control': 'no-store'}); upstreamRes.pipe(res);
       });

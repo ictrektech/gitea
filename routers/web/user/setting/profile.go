@@ -396,12 +396,21 @@ func UpdateUserLang(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("settings_title")
 	ctx.Data["PageIsSettingsAppearance"] = true
 
-	if form.Language != "" {
-		if !util.SliceContainsString(setting.Langs, form.Language) {
-			ctx.Flash.Error(ctx.Tr("settings.update_language_not_found", form.Language))
-			ctx.Redirect(setting.AppSubURL + "/user/settings/appearance")
-			return
+	// "auto" follows the platform language; any other value keeps the chosen one.
+	follow := form.Language == "auto"
+	if follow {
+		form.Language = ""
+		if lang := ctx.Req.Header.Get("X-VOS-Language"); util.SliceContainsString(setting.Langs, lang) {
+			form.Language = lang
 		}
+	}
+	if form.Language != "" && !util.SliceContainsString(setting.Langs, form.Language) {
+		ctx.Flash.Error(ctx.Tr("settings.update_language_not_found", form.Language))
+		ctx.Redirect(setting.AppSubURL + "/user/settings/appearance")
+		return
+	}
+	if form.Language == "" {
+		form.Language = ctx.Doer.Language
 	}
 
 	opts := &user_service.UpdateOptions{
@@ -412,12 +421,12 @@ func UpdateUserLang(ctx *context.Context) {
 		return
 	}
 
-	follow := strconv.FormatBool(ctx.FormString("follow") == "true")
-	if err := user_model.SetUserSetting(ctx, ctx.Doer.ID, user_model.SettingsKeyFollowVOSLocale, follow); err != nil {
+	value := strconv.FormatBool(follow)
+	if err := user_model.SetUserSetting(ctx, ctx.Doer.ID, user_model.SettingsKeyFollowVOSLocale, value); err != nil {
 		ctx.ServerError("SetUserSetting", err)
 		return
 	}
-	setVOSFollowCookie(ctx, follow)
+	setVOSFollowCookie(ctx, value)
 
 	// Update the language to the one we just set
 	middleware.SetLocaleCookie(ctx.Resp, ctx.Doer.Language, 0)
