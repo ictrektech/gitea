@@ -26,6 +26,8 @@ VOS 令牌请求验证最新 userinfo；原生 PAT 与 SSH 使用平台为应用
 
 Gitea 原生 HTTP 只监听容器内 `127.0.0.1:3000`，VOS HTTP 流量通过 8080 网关；内置 SSH 服务监听 2222。网关清除客户端认证头，注入已验证身份，原生 session 不覆盖当前 VOS 用户。
 
+应用内「API 接入指南」提供中英文快速目录、完整本机 OpenAPI/Swagger 链接，以及 REST 请求/返回、VOS 会话、MCP 初始化、分页、错误与重试说明。完整原生接口以本机 `/app/com.ictrek.gitea/openapi3.v1.json` 为准，Git/SSH/MCP 分别遵循各自协议。
+
 浏览器统一 VOS 登录；外部 API 可使用原生 PAT（`Authorization: token <PAT>`）或 VOS access token（`Bearer`）。Git HTTPS 支持 PAT / VOS token，SSH 使用原生密钥。PAT 与 SSH 密钥在 Gitea 用户设置中管理；VOS 关联用户名与 subject 绑定不可由本地改名破坏。应用 context 只读挂载，凭据在启动时由 root 读入进程内存，不写入数据目录或镜像。
 
 ## 数据与公共目录

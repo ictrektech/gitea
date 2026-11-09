@@ -11,12 +11,12 @@
 <body>
 <p class="eyebrow">GITEA / VOS</p>
 <section data-guide-lang="zh">
-  <h1>API 接入指南</h1>
+  <h1>API 接入指南</h1><nav aria-label="快速跳转"><a href="#zh-api-1">地址与身份</a> · <a href="#zh-api-2">调用 API</a> · <a href="#zh-api-3">Git HTTPS</a> · <a href="#zh-api-4">原生 PAT 与 SSH 密钥</a> · <a href="#zh-api-5">MCP 与 AI Agent</a> · <a href="#zh-api-6">Actions 与 Runner</a> · <a href="#zh-api-7">公共目录与备份</a> · <a href="#zh-api-8">完整接口契约与返回值</a> · <a href="#zh-api-9">VOS 会话接口与错误处理</a></nav>
   <p class="muted">用同一个 VOS 身份连接代码仓库、脚本和应用。</p>
-  <h2>地址与身份</h2>
+  <h2 id="zh-api-1">地址与身份</h2>
   <table><tr><th>用途</th><th>地址</th></tr><tr><td>浏览器 API</td><td><code>/app/com.ictrek.gitea/api/v1</code></td></tr><tr><td>同机应用</td><td><code>http://gitea:8080/app/com.ictrek.gitea/api/v1</code></td></tr><tr><td>交互式 API 文档</td><td><a href="/app/com.ictrek.gitea/api/swagger">Swagger</a></td></tr></table>
   <p>从 VOS 打开应用后自动登录。首次访问优先使用 VOS 用户名创建独立 Gitea 账户。旧版自动生成的用户名会在下次登录时迁移到可用的用户名，仓库和凭据继续保留；请按仓库页面更新克隆地址。之后按 VOS 的稳定用户 ID 同步显示名、管理员角色与语言；VOS 中改名不会改变仓库归属。普通用户仅能访问自己或被授权的仓库，系统管理员拥有 Gitea 管理权限。</p>
-  <h2>调用 API</h2>
+  <h2 id="zh-api-2">调用 API</h2>
   <p>外部客户端可以使用原生 Gitea PAT，或使用 VOS 为 <code>com.ictrek.gitea</code> 签发的用户 access token。通过 VOS OAuth2 authorization code + PKCE 获取，令牌到期后按 VOS OAuth2 流程刷新。浏览器插件可调用 <code>window.vos_platform.api.v1000.oauth2.authorize()</code> 和 <code>token()</code>，并校验 state。不要将令牌写入仓库或日志。</p>
   <pre>export GITEA_URL='https://&lt;VOS地址&gt;:1180/app/com.ictrek.gitea'
 # VOS_ACCESS_TOKEN 由你的 OAuth2 客户端提供
@@ -26,9 +26,9 @@ curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
 curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
   "$GITEA_URL/api/v1/user/repos"</pre>
   <p>创建仓库：<code>POST /api/v1/user/repos</code>，JSON 示例 <code>{"name":"demo","private":true,"auto_init":true}</code>。仓库默认私有。更多接口使用上方 Swagger，路径前缀始终为 <code>/app/com.ictrek.gitea</code>。</p>
-  <h2>Git HTTPS</h2>
+  <h2 id="zh-api-3">Git HTTPS</h2>
   <p>使用页面给出的 HTTPS clone URL；用户名填写 Gitea 用户名，密码可使用原生 PAT 或 VOS access token。建议使用系统凭据管理器，不把令牌写入 URL。Git LFS 保留 Gitea 原生协议。浏览器登录统一走 VOS，无需第二套登录密码。</p>
-  <h2>原生 PAT 与 SSH 密钥</h2>
+  <h2 id="zh-api-4">原生 PAT 与 SSH 密钥</h2>
   <p>在<a href="/app/com.ictrek.gitea/user/settings/applications">用户设置 → 应用</a>创建个人访问令牌，选择所需权限；令牌只显示一次。在<a href="/app/com.ictrek.gitea/user/settings/keys">用户设置 → SSH / GPG 密钥</a>添加自己的 SSH 公钥，私钥留在客户端。</p>
   <pre># GITEA_TOKEN 为你自己创建的原生 PAT
 curl --fail -H "Authorization: token $GITEA_TOKEN" \
@@ -38,7 +38,7 @@ curl --fail -H "Authorization: token $GITEA_TOKEN" \
 ssh -T -p 32222 git@&lt;VOS设备IP或域名&gt;
 git clone ssh://git@&lt;VOS设备IP或域名&gt;:32222/&lt;仓库所有者&gt;/&lt;仓库名&gt;.git</pre>
   <p>SSH 独立于宿主机管理用的 22 端口，安装参数可调整端口与外部域名；仓库页面会生成 clone 地址。首次使用先访问一次代码管理完成 VOS 账户创建。VOS 关联账户的 PAT 和 SSH 操作会通过应用专属平台凭据查询该用户的最新状态；用户被禁用、删除或平台校验不可用时拒绝访问。PAT 与 SSH 密钥也可分别在 Gitea 中撤销；VOS 退出浏览器会话不等于撤销这些长期凭据。</p>
-  <h2>MCP 与 AI Agent</h2>
+  <h2 id="zh-api-5">MCP 与 AI Agent</h2>
   <p>应用同时运行官方 <code>gitea-mcp</code> 服务，在 <code>/app/com.ictrek.gitea/mcp</code> 提供无状态 HTTP 端点；同一 VOS 网络内使用 <code>http://gitea:8080/app/com.ictrek.gitea/mcp</code>。端点由网关校验凭据，必须携带 <code>Authorization</code>，值为 VOS access token 或自己的 Gitea PAT；网关只接受 <code>Bearer</code>、<code>token</code>、<code>Basic</code> 三种写法，前两种等价；无凭据或凭据无效时返回 <code>401</code>。服务端不保存令牌，权限按该用户生效。只开放 repository、file、branch、pull_request、issue 五类工具；创建仓库需要 PAT 包含 <code>write:user</code>。不要附加不匹配的 <code>Origin</code> 头，跨站来源会被拒绝。</p>
   <pre># 先在“用户设置 → 应用”创建 PAT，然后初始化 MCP 会话
 curl --fail -X POST "http://&lt;VOS设备IP或域名&gt;:1180/app/com.ictrek.gitea/mcp" \
@@ -46,7 +46,7 @@ curl --fail -X POST "http://&lt;VOS设备IP或域名&gt;:1180/app/com.ictrek.git
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
-  <h2>Actions 与 Runner</h2>
+  <h2 id="zh-api-6">Actions 与 Runner</h2>
   <p>Actions 已开启。外部 Runner 使用前，请在安装配置“Gitea 对外访问地址”填写完整的 VOS 可达地址，供 checkout、任务 API 与 Webhook 使用；默认值适合同一 VOS 网络。先在仓库设置启用 Actions，再从“仓库 / 组织 / 用户 / 实例设置 → Actions → Runners”取得相应作用域的注册令牌。实例级 runner 需要管理员权限。Runner 在构建机独立运行，不会自动占用 VOS 容器的构建环境。</p>
   <pre>mkdir -p ~/dev/build/gitea-runner
 cd ~/dev/build/gitea-runner
@@ -67,16 +67,37 @@ jobs:
       - uses: builtin:checkout
       - run: echo 'VOS Gitea Actions ready'</pre>
   <p>注册令牌用于新增 runner，机器凭据用于轮询任务，均不同于用户 PAT。注册后的 runner 按仓库 / 组织 / 实例作用域独立管理，不随浏览器退出而停止；撤销时需在相应 Runners 页面禁用或删除 runner，必要时重置注册令牌。任务与 Secrets 的权限遵循 Gitea 原生规则。</p>
-  <h2>公共目录与备份</h2>
+  <h2 id="zh-api-7">公共目录与备份</h2>
   <p>安装时在“Gitea 数据目录”中选择 VOS 公共目录或宿主机路径。<code>git/repositories/</code> 保存裸仓库，<code>gitea/</code> 保存 LFS、附件、头像等文件；账户、权限、Issue、PR 和 Actions 元数据保存在 PGV 的独立 <code>gitea</code> PostgreSQL 数据库。授权访问该目录的 NAS 用户能直接读取文件，因此应使用专用目录并限制 NAS 目录权限。应用内的仓库授权不会替代 NAS 目录授权。</p>
   <p>应用配置与密钥位于 VOS 应用私有存储的 <code>config/</code>。备份时停止应用，同时备份数据目录、私有配置目录与 PGV 的 <code>gitea</code> 数据库；升级保留原路径。公开数据目录不会自动导入已有普通文件夹为 Git 仓库。</p>
+
+  <h2 id="zh-api-8">完整接口契约与返回值</h2>
+  <p><a href="/app/com.ictrek.gitea/openapi3.v1.json">本机 OpenAPI 3 JSON</a>与上方 Swagger 列出全部原生 REST 接口，包括仓库、文件、分支、Issue、PR、组织、用户、Actions、Webhook、令牌和 SSH 密钥。每个操作展开查看路径参数、查询参数、请求体、响应状态和 Schema；只使用当前安装版本提供的字段，不照搬其他 Gitea 版本的接口。Git、SSH 和 MCP 是独立协议，不使用 REST JSON 响应结构。</p>
+  <table><tr><th>请求</th><th>输入和权限</th><th>成功返回</th></tr>
+  <tr><td><code>GET /api/v1/user</code></td><td>无请求体；有效用户凭据。</td><td><code>200 User</code>，包括 <code>id</code>（整数）、<code>login</code>（字符串）、<code>full_name</code>（字符串）、<code>is_admin</code>（布尔值）。</td></tr>
+  <tr><td><code>GET /api/v1/user/repos?page=1&amp;limit=20</code></td><td><code>page</code>、<code>limit</code> 可选整数；仅返回当前身份可见的仓库。</td><td><code>200 Repository[]</code>，空结果为 <code>[]</code>；按页读取直至没有下一页。</td></tr>
+  <tr><td><code>POST /api/v1/user/repos</code></td><td>JSON：必填 <code>name:string</code>；可选 <code>private:boolean</code>、<code>auto_init:boolean</code>、<code>description:string</code>、<code>default_branch:string</code>。原生 PAT 需相应用户写权限；VOS 身份仍受账户与仓库策略约束。</td><td><code>201 Repository</code>，包括 <code>id</code>、<code>name</code>、<code>full_name</code>、<code>private</code>、<code>html_url</code>、<code>clone_url</code>、<code>ssh_url</code>。保存返回的实际地址；不要自行拼接用户名和端口。</td></tr></table>
+  <pre># 使用自己的 PAT 创建一个私有仓库；请求体不要含凭据
+curl --fail-with-body -X POST "$GITEA_URL/api/v1/user/repos" \
+  -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"api-example","private":true,"auto_init":true,"description":"API example"}'</pre>
+  <p>上述响应字段为常用字段摘录，完整字段、可空性、分页头和每个操作支持的状态以本机 OpenAPI 为准。写操作未声明幂等键；网络中断后先查询仓库/Issue/PR 是否创建成功，再决定是否重试，避免重复创建。原生返回 <code>204</code> 的删除等操作没有正文，不能调用 JSON 解析。文件、归档、Git LFS 与 Actions 日志按响应 <code>Content-Type</code> 读取，不能统一按 JSON 处理。</p>
+  <h2 id="zh-api-9">VOS 会话接口与错误处理</h2>
+  <p>以下路径位于 <code>/app/com.ictrek.gitea</code> 下，是浏览器登录桥使用的接口；外部脚本直接使用 PAT/VOS Bearer 调用原生 API，无需模拟浏览器会话。</p>
+  <table><tr><th>操作</th><th>请求</th><th>响应</th></tr>
+  <tr><td><code>POST /vos/login</code></td><td>同源 <code>Origin</code>；JSON <code>access_token:string</code>、可选 <code>locale:string</code>。只接受有效且启用的 VOS 用户。</td><td><code>200 {"username":"vos-…","changed":true}</code>，设置 HttpOnly 会话 cookie；<code>changed</code> 表示是否创建或切换会话，不是仓库迁移结果。</td></tr>
+  <tr><td><code>GET /vos/session</code></td><td>有效 VOS 身份或浏览器 cookie；PAT 不能访问此 VOS 桥接口。</td><td><code>200 {"username":"vos-…"}</code>。</td></tr>
+  <tr><td><code>POST /vos/locale</code></td><td>同源浏览器会话；JSON <code>locale:string</code>，归一化为 <code>zh-CN</code>、<code>zh-TW</code> 或 <code>en-US</code>。</td><td><code>204</code>，无正文。</td></tr>
+  <tr><td><code>POST /vos/logout</code></td><td>同源请求，携带当前 cookie。</td><td><code>204</code>，清除浏览器会话，不撤销 PAT/SSH/Runner 凭据。</td></tr></table>
+  <p>先检查 HTTP 状态和 Content-Type。网关的 <code>401</code>（缺少/无效身份）、<code>403</code>（同源校验或 VOS 验证失败）、<code>502</code>（原生服务/MCP 不可达）可能返回纯文本；原生 REST 错误通常返回 JSON <code>{"message":"…","url":"…"}</code>。不要按 <code>message</code> 文本匹配错误类型。<code>404</code> 也可能表示当前身份无权查看私有资源；<code>422</code> 应修正请求字段，不能无限重试。失效 VOS token 按 OAuth2 刷新后再试一次；PAT 失效则重新创建或检查权限。读取/连接故障可有界退避重试，写操作必须先核实执行结果。</p>
+  <p>MCP 客户端先发送 <code>initialize</code>（含其支持的 <code>protocolVersion</code>、<code>capabilities</code>、<code>clientInfo</code>），处理服务端协商的版本，再发送 <code>notifications/initialized</code>、<code>tools/list</code> 和 <code>tools/call</code>。工具名称与 <code>inputSchema</code> 必须从运行中的 <code>tools/list</code> 读取；调用参数为 <code>{"name":"工具名","arguments":{}}</code>，响应可能为 JSON 或 SSE。JSON-RPC 的 <code>error</code> 和工具结果的 <code>isError:true</code> 均表示失败，即使 HTTP 为 200；不能仅凭端口可达判定工具可用。</p>
 </section>
 <section data-guide-lang="en" hidden>
-  <h1>API integration guide</h1><p class="muted">Connect repositories, scripts and applications using your VOS identity.</p>
-  <h2>Endpoints and identity</h2>
+  <h1>API integration guide</h1><nav aria-label="Contents"><a href="#en-api-1">Endpoints and identity</a> · <a href="#en-api-2">API requests</a> · <a href="#en-api-3">Git over HTTPS</a> · <a href="#en-api-4">Native PAT and SSH</a> · <a href="#en-api-5">MCP and AI agents</a> · <a href="#en-api-6">Actions and runners</a> · <a href="#en-api-7">Shared storage and backups</a> · <a href="#en-api-8">Complete API contracts and responses</a> · <a href="#en-api-9">VOS session API and error handling</a></nav><p class="muted">Connect repositories, scripts and applications using your VOS identity.</p>
+  <h2 id="en-api-1">Endpoints and identity</h2>
   <p>Browser API: <code>/app/com.ictrek.gitea/api/v1</code><br>Same-host applications: <code>http://gitea:8080/app/com.ictrek.gitea/api/v1</code><br><a href="/app/com.ictrek.gitea/api/swagger">Interactive Swagger documentation</a></p>
   <p>Opening Gitea in VOS signs you in and provisions an independent account on first access, using your VOS username when available. Accounts with legacy generated handles move to an available username on their next sign-in. Repositories and credentials stay with the account; update clone URLs from the repository page. Your stable VOS subject owns the account; display name, language and administrator role synchronize on access. Renaming your VOS account preserves repository ownership. Repositories are private by default.</p>
-  <h2>API requests</h2>
+  <h2 id="en-api-2">API requests</h2>
   <p>Use a native Gitea personal access token (PAT), or a VOS user access token for <code>com.ictrek.gitea</code>, obtained through authorization code + PKCE. Browser integrations can use <code>window.vos_platform.api.v1000.oauth2.authorize()</code> and <code>token()</code>, validating state. Refresh expired tokens using the VOS OAuth2 flow. Keep credentials out of source control and logs.</p>
   <pre>export GITEA_URL='https://&lt;VOS-HOST&gt;:1180/app/com.ictrek.gitea'
 curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
@@ -84,20 +105,20 @@ curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
 curl --fail -H "Authorization: Bearer $VOS_ACCESS_TOKEN" \
   "$GITEA_URL/api/v1/user/repos"</pre>
   <p>Create a repository with <code>POST /api/v1/user/repos</code> and JSON <code>{"name":"demo","private":true,"auto_init":true}</code>. Refer to Swagger for the remaining API. All external paths include <code>/app/com.ictrek.gitea</code>.</p>
-  <h2>Git over HTTPS</h2><p>Use the HTTPS clone URL shown in Gitea. Enter your Gitea username and use a native PAT or VOS access token as the password. Keep it in your system credential manager. Git LFS retains its native protocol; browser sign-in uses VOS.</p>
-  <h2>Native PAT and SSH</h2><p>Create a scoped PAT in <a href="/app/com.ictrek.gitea/user/settings/applications">Settings → Applications</a>, or add an SSH public key in <a href="/app/com.ictrek.gitea/user/settings/keys">Settings → SSH / GPG Keys</a>. Keep private keys on your client. Open Code Management once before first use to provision your VOS account.</p>
+  <h2 id="en-api-3">Git over HTTPS</h2><p>Use the HTTPS clone URL shown in Gitea. Enter your Gitea username and use a native PAT or VOS access token as the password. Keep it in your system credential manager. Git LFS retains its native protocol; browser sign-in uses VOS.</p>
+  <h2 id="en-api-4">Native PAT and SSH</h2><p>Create a scoped PAT in <a href="/app/com.ictrek.gitea/user/settings/applications">Settings → Applications</a>, or add an SSH public key in <a href="/app/com.ictrek.gitea/user/settings/keys">Settings → SSH / GPG Keys</a>. Keep private keys on your client. Open Code Management once before first use to provision your VOS account.</p>
   <pre>curl --fail -H "Authorization: token $GITEA_TOKEN" "$GITEA_URL/api/v1/user"
 ssh -T -p 32222 git@&lt;VOS-HOST&gt;
 git clone ssh://git@&lt;VOS-HOST&gt;:32222/&lt;owner&gt;/&lt;repository&gt;.git</pre>
   <p>Port 32222 is separate from host administration SSH; change it or the advertised hostname in installation settings. PAT and SSH access for linked users check current VOS account state through the app's platform credential, failing closed on disabled/deleted accounts or verification failure. Revoke individual PATs and keys in Gitea. Browser logout does not revoke these long-lived credentials.</p>
-  <h2>MCP and AI agents</h2><p>The app also runs the official <code>gitea-mcp</code> server, exposing a stateless HTTP endpoint at <code>/app/com.ictrek.gitea/mcp</code>; inside the same VOS network use <code>http://gitea:8080/app/com.ictrek.gitea/mcp</code>. The gateway checks credentials: <code>Authorization</code> must hold a VOS access token or your own Gitea PAT. The gateway accepts only <code>Bearer</code>, <code>token</code> and <code>Basic</code>; the first two are equivalent. Requests without a valid credential return <code>401</code>. The server stores no credentials, so permissions follow that user. Only repository, file, branch, pull_request and issue tools are enabled; creating repositories needs <code>write:user</code> on the PAT. Do not send a mismatching <code>Origin</code> header, cross-origin requests are rejected.</p>
+  <h2 id="en-api-5">MCP and AI agents</h2><p>The app also runs the official <code>gitea-mcp</code> server, exposing a stateless HTTP endpoint at <code>/app/com.ictrek.gitea/mcp</code>; inside the same VOS network use <code>http://gitea:8080/app/com.ictrek.gitea/mcp</code>. The gateway checks credentials: <code>Authorization</code> must hold a VOS access token or your own Gitea PAT. The gateway accepts only <code>Bearer</code>, <code>token</code> and <code>Basic</code>; the first two are equivalent. Requests without a valid credential return <code>401</code>. The server stores no credentials, so permissions follow that user. Only repository, file, branch, pull_request and issue tools are enabled; creating repositories needs <code>write:user</code> on the PAT. Do not send a mismatching <code>Origin</code> header, cross-origin requests are rejected.</p>
   <pre># Create a PAT in Settings → Applications first, then probe the endpoint
 curl --fail -X POST "http://&lt;VOS-HOST&gt;:1180/app/com.ictrek.gitea/mcp" \
   -H "Authorization: Bearer $GITEA_PAT" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'</pre>
-  <h2>Actions and runners</h2><p>Actions is enabled. Set the installation option “Gitea Public URL” to the complete reachable VOS URL for external runners, checkout, job APIs and webhooks; its default is for the same VOS network. Enable it for your repository and obtain a registration token from its Actions → Runners settings, or use organization, user or instance scope. Instance runners require administrator privileges. Run Gitea Runner 5.x on your build machine:</p>
+  <h2 id="en-api-6">Actions and runners</h2><p>Actions is enabled. Set the installation option “Gitea Public URL” to the complete reachable VOS URL for external runners, checkout, job APIs and webhooks; its default is for the same VOS network. Enable it for your repository and obtain a registration token from its Actions → Runners settings, or use organization, user or instance scope. Instance runners require administrator privileges. Run Gitea Runner 5.x on your build machine:</p>
   <pre>mkdir -p ~/dev/build/gitea-runner
 cd ~/dev/build/gitea-runner
 gitea-runner register --no-interactive \
@@ -116,6 +137,26 @@ jobs:
       - uses: builtin:checkout
       - run: echo 'VOS Gitea Actions ready'</pre>
   <p>Registration tokens, runner machine credentials and user PATs are separate. Registered runners use native repository/organization/instance scope and remain independent of browser sessions. Disable or delete a runner in its Runners settings to revoke it; reset registration tokens separately when needed. Jobs and Secrets follow native Gitea permissions.</p>
-  <h2>Shared storage and backups</h2><p>Select a VOS public directory or host path during installation. Bare repositories live in <code>git/repositories/</code>; Attachments, LFS and avatars live in <code>gitea/</code>; metadata lives in the dedicated PGV PostgreSQL database <code>gitea</code>. Use a dedicated directory with restrictive NAS permissions: filesystem readers can read repository files independently of Gitea permissions.</p><p>Secrets and configuration stay in the application's private <code>config/</code> storage. Stop the app and back up both directories and the PGV gitea database together. Keep the same paths on upgrades. Existing ordinary directories are not automatically imported as repositories.</p>
+  <h2 id="en-api-7">Shared storage and backups</h2><p>Select a VOS public directory or host path during installation. Bare repositories live in <code>git/repositories/</code>; Attachments, LFS and avatars live in <code>gitea/</code>; metadata lives in the dedicated PGV PostgreSQL database <code>gitea</code>. Use a dedicated directory with restrictive NAS permissions: filesystem readers can read repository files independently of Gitea permissions.</p><p>Secrets and configuration stay in the application's private <code>config/</code> storage. Stop the app and back up both directories and the PGV gitea database together. Keep the same paths on upgrades. Existing ordinary directories are not automatically imported as repositories.</p>
+
+  <h2 id="en-api-8">Complete API contracts and responses</h2>
+  <p>The <a href="/app/com.ictrek.gitea/openapi3.v1.json">local OpenAPI 3 JSON</a> and Swagger above cover all native REST operations: repositories, files, branches, issues, pull requests, organizations, users, Actions, webhooks, tokens and SSH keys. Expand each operation for path/query parameters, request bodies, response codes and schemas. Use the installed version's contract. Git, SSH and MCP use their own protocols rather than the REST JSON format.</p>
+  <table><tr><th>Request</th><th>Input and permission</th><th>Successful response</th></tr>
+  <tr><td><code>GET /api/v1/user</code></td><td>No body; valid user credential.</td><td><code>200 User</code>, including integer <code>id</code>, string <code>login</code>/<code>full_name</code> and boolean <code>is_admin</code>.</td></tr>
+  <tr><td><code>GET /api/v1/user/repos?page=1&amp;limit=20</code></td><td>Optional integer <code>page</code>/<code>limit</code>; only repositories visible to the caller.</td><td><code>200 Repository[]</code>; an empty result is <code>[]</code>. Continue paging until no next page remains.</td></tr>
+  <tr><td><code>POST /api/v1/user/repos</code></td><td>JSON: required <code>name:string</code>; optional <code>private:boolean</code>, <code>auto_init:boolean</code>, <code>description:string</code>, <code>default_branch:string</code>. A PAT needs the appropriate user write scope; VOS callers remain subject to account/repository policy.</td><td><code>201 Repository</code>, including <code>id</code>, <code>name</code>, <code>full_name</code>, <code>private</code>, <code>html_url</code>, <code>clone_url</code> and <code>ssh_url</code>. Save returned URLs rather than constructing names or ports.</td></tr></table>
+  <pre>curl --fail-with-body -X POST "$GITEA_URL/api/v1/user/repos" \
+  -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"api-example","private":true,"auto_init":true,"description":"API example"}'</pre>
+  <p>These are selected response fields; consult the local OpenAPI for complete fields, nullability, pagination headers and operation-specific status codes. Writes do not declare an idempotency key: after a connection failure, check whether the repository/issue/PR was created before retrying. A <code>204</code> response has no body. Read files, archives, Git LFS and Actions logs according to their Content-Type rather than parsing every response as JSON.</p>
+  <h2 id="en-api-9">VOS session API and error handling</h2>
+  <p>The following paths are relative to <code>/app/com.ictrek.gitea</code> and serve the browser login bridge. External scripts should call the native API with a PAT or VOS Bearer token directly.</p>
+  <table><tr><th>Operation</th><th>Request</th><th>Response</th></tr>
+  <tr><td><code>POST /vos/login</code></td><td>Same-origin <code>Origin</code>; JSON <code>access_token:string</code>, optional <code>locale:string</code>; the VOS user must be valid and enabled.</td><td><code>200 {"username":"vos-…","changed":true}</code>, plus an HttpOnly session cookie. <code>changed</code> describes session creation/switching, not repository migration.</td></tr>
+  <tr><td><code>GET /vos/session</code></td><td>Valid VOS identity or browser session cookie; a PAT cannot access this VOS bridge operation.</td><td><code>200 {"username":"vos-…"}</code>.</td></tr>
+  <tr><td><code>POST /vos/locale</code></td><td>Same-origin browser session; JSON <code>locale:string</code>, normalized to <code>zh-CN</code>, <code>zh-TW</code> or <code>en-US</code>.</td><td><code>204</code>, no body.</td></tr>
+  <tr><td><code>POST /vos/logout</code></td><td>Same-origin request with the current cookie.</td><td><code>204</code>; clears the browser session, not PAT/SSH/runner credentials.</td></tr></table>
+  <p>Inspect HTTP status and Content-Type first. Gateway <code>401</code> (missing/invalid identity), <code>403</code> (origin or VOS validation failure) and <code>502</code> (native service/MCP unavailable) can have plain-text bodies. Native REST errors normally contain JSON <code>{"message":"…","url":"…"}</code>; do not classify errors by message text. <code>404</code> can also hide a private resource from an unauthorized caller; correct invalid fields for <code>422</code> rather than retrying indefinitely. Refresh an expired VOS token through OAuth2 and retry once; replace/review an invalid PAT. Use bounded backoff for reads and connection failures, and reconcile write outcomes before retrying.</p>
+  <p>MCP clients send <code>initialize</code> with their supported <code>protocolVersion</code>, <code>capabilities</code> and <code>clientInfo</code>, negotiate the returned version, then send <code>notifications/initialized</code>, <code>tools/list</code> and <code>tools/call</code>. Discover tool names and <code>inputSchema</code> from the running server; call with <code>{"name":"tool-name","arguments":{}}</code>. Responses can be JSON or SSE. JSON-RPC <code>error</code> and tool results with <code>isError:true</code> are failures even with HTTP 200; reachability alone does not prove a working tool.</p>
 </section>
 </body></html>
