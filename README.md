@@ -53,6 +53,8 @@ Actions 默认开启，Runner 独立安装在构建机。`GITEA_PUBLIC_URL` 决�
 
 从仓库、组织、用户或实例的 Actions → Runners 获取对应作用域的注册令牌。使用 Gitea Runner 5.x 注册，持久保存 `.runner`；实例级操作需要管理员。Runner 使用机器凭据，按原生作用域独立运行；浏览器退出不会注销 runner。撤销时在 Runners 页面禁用/删除，注册令牌另行重置。API 指南提供 PAT、SSH、Runner CLI 和 `.gitea/workflows/ci.yml` 示例。
 
+VOS 中的 Actions → Runners 会探测同机 GARM。探测成功后可直接打开，也可以填写其他机器上的完整 GARM URL。手填地址只记在当前浏览器。未安装 GARM 时仍可使用原生 Runner 注册、列表和任务调度。
+
 ## 构建与验证
 
 Git 操作只在本地执行。先 rsync 当前源码到目标机器的 `~/dev/repos/gitea`，再在机器上执行：
