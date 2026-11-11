@@ -57,6 +57,7 @@ gitea-runner register --no-interactive \
   --name vos-runner --labels 'vos-linux:host'
 gitea-runner daemon</pre>
   <p><code>--instance</code> 必须包含 <code>/app/com.ictrek.gitea/</code>，并能被 runner 和任务环境访问；同一 VOS 网络可用 <code>http://gitea:8080/app/com.ictrek.gitea/</code>。外部机器使用 VOS 的 HTTPS 地址并信任其证书。示例 host 标签直接在 runner 环境执行，仅用于可信仓库；需要容器隔离时按<a href="https://docs.gitea.com/runner/">官方 Runner 文档</a>配置 Docker 标签。持久保存 <code>.runner</code>，它包含机器凭据。</p>
+  <p>从站点管理 → Actions → 运行器打开列表。检测到同机 GARM 时，可点 <strong>Open GARM on this VOS device</strong>。也可在 <strong>GARM URL on another device</strong> 填写其他节点的完整 HTTP 或 HTTPS 地址，再点 <strong>Open GARM</strong>。浏览器会记住地址，清空输入框可删除记录。同机 GARM 未安装或暂不可用时，原生运行器列表和注册照常可用。该入口只负责跳转，运行器仍需注册，现有 Actions API 无变化。</p>
   <p>仓库中添加 <code>.gitea/workflows/ci.yml</code>：</p>
   <pre>name: CI
 on: [push, workflow_dispatch]
@@ -127,6 +128,7 @@ gitea-runner register --no-interactive \
   --name vos-runner --labels 'vos-linux:host'
 gitea-runner daemon</pre>
   <p>Include <code>/app/com.ictrek.gitea/</code> in the instance URL. Inside the VOS network use <code>http://gitea:8080/app/com.ictrek.gitea/</code>; external runners need the VOS HTTPS address and certificate trust. Host labels execute in the runner environment and are suitable for trusted repositories; use Docker labels when isolation is needed. See the <a href="https://docs.gitea.com/runner/">official runner guide</a>. Persist the secret <code>.runner</code> file.</p>
+  <p>Open Site Administration → Actions → Runners. Select <strong>Open GARM on this VOS device</strong> when local GARM is detected, or enter the full HTTP or HTTPS URL of another instance under <strong>GARM URL on another device</strong> and select <strong>Open GARM</strong>. The browser remembers the address until you clear the field. The native runner list and registration remain available if local GARM is absent. The shortcut opens GARM. Runner registration and the Actions API are unchanged.</p>
   <pre># .gitea/workflows/ci.yml
 name: CI
 on: [push, workflow_dispatch]
