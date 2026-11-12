@@ -50,6 +50,17 @@
 				</form>
 			</div>
 		</div>
+		{{if or .PageIsOrgSettings .PageIsRepoSettings}}
+			<div class="ui attached segment" data-vos-garm-register="{{AppSubUrl}}"
+				data-working="{{ctx.Locale.Tr "actions.runners.garm_register_running"}}"
+				data-created="{{ctx.Locale.Tr "actions.runners.garm_register_created"}}"
+				data-webhook="{{ctx.Locale.Tr "actions.runners.garm_register_webhook"}}"
+				data-failed="{{ctx.Locale.Tr "actions.runners.garm_register_failed"}}">
+				<button type="button" class="ui small button" data-vos-garm-register-button>{{ctx.Locale.Tr "actions.runners.garm_register"}}</button>
+				<span class="tw-ml-2" data-vos-garm-register-status role="status" aria-live="polite"></span>
+			</div>
+			<script src="{{AppSubUrl}}/vos/garm-register.js" defer></script>
+		{{end}}
 	{{end}}
 	<div class="ui attached segment">
 		<form class="ui form ignore-dirty" id="user-list-search-form" action="{{$.Link}}">
