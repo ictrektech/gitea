@@ -26,6 +26,8 @@ VOS 令牌请求验证最新 userinfo；原生 PAT 与 SSH 使用平台为应用
 
 Gitea 原生 HTTP 只监听容器内 `127.0.0.1:3000`，VOS HTTP 流量通过 8080 网关；内置 SSH 服务监听 2222。网关清除客户端认证头，注入已验证身份，原生 session 不覆盖当前 VOS 用户。
 
+应用内「API 接入指南」提供中英文快速目录、完整本机 OpenAPI/Swagger 链接，以及 REST 请求/返回、VOS 会话、MCP 初始化、分页、错误与重试说明。完整原生接口以本机 `/app/com.ictrek.gitea/openapi3.v1.json` 为准，Git/SSH/MCP 分别遵循各自协议。
+
 浏览器统一 VOS 登录；外部 API 可使用原生 PAT（`Authorization: token <PAT>`）或 VOS access token（`Bearer`）。Git HTTPS 支持 PAT / VOS token，SSH 使用原生密钥。PAT 与 SSH 密钥在 Gitea 用户设置中管理；VOS 关联用户名与 subject 绑定不可由本地改名破坏。应用 context 只读挂载，凭据在启动时由 root 读入进程内存，不写入数据目录或镜像。
 
 ## 数据与公共目录
@@ -50,6 +52,8 @@ SSH 默认映射宿主机 `32222` 到容器 `2222` 的内置 SSH 服务器，与
 Actions 默认开启，Runner 独立安装在构建机。`GITEA_PUBLIC_URL` 决定 Actions checkout、任务 API 和 Webhook 的标准地址：同一 VOS 网络默认使用 `http://gitea:8080/app/com.ictrek.gitea/`，外部 Runner 应配置完整设备地址，例如 `https://<设备IP>:1180/app/com.ictrek.gitea/`，并在任务环境中信任证书。
 
 从仓库、组织、用户或实例的 Actions → Runners 获取对应作用域的注册令牌。使用 Gitea Runner 5.x 注册，持久保存 `.runner`；实例级操作需要管理员。Runner 使用机器凭据，按原生作用域独立运行；浏览器退出不会注销 runner。撤销时在 Runners 页面禁用/删除，注册令牌另行重置。API 指南提供 PAT、SSH、Runner CLI 和 `.gitea/workflows/ci.yml` 示例。
+
+VOS 中的 Actions → Runners 会探测同机 GARM。探测成功后可直接打开，也可以填写其他机器上的完整 GARM URL。手填地址只记在当前浏览器。未安装 GARM 时仍可使用原生 Runner 注册、列表和任务调度。
 
 ## 构建与验证
 

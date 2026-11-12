@@ -11,3 +11,5 @@ The app starts one Actions runner (`act-runner`) by default. It registers with a
 The app also runs the official `gitea-mcp` server (service `gitea-mcp`), exposing a stateless HTTP endpoint at `/app/com.ictrek.gitea/mcp` for external AI agents. The gateway enforces credentials: `Authorization` must hold a VOS access token or the caller's own Gitea PAT, The gateway accepts only `Bearer`, `token` and `Basic`; the first two are equivalent. Missing or invalid credentials return `401`. The server stores no credentials, so permissions follow that user. Only repository, file, branch, pull_request and issue tools are enabled; creating repositories needs `write:user` on the PAT. Mismatching `Origin` headers are rejected.
 
 Keep the same storage paths on upgrades. Existing GitLab accounts, repositories and data are not migrated or removed.
+
+Under Actions → Runners, open the discovered local GARM or enter the full HTTP/HTTPS URL of a GARM instance on another device. The address stays in the current browser. Native runner management remains available when local GARM is absent. Opening GARM does not register a runner.

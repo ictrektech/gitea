@@ -35,6 +35,22 @@
 
 		</div>
 	</h4>
+	{{if eq AppSubUrl "/app/com.ictrek.gitea"}}
+		<div class="ui attached segment" data-global-init="initVosGarmChoices">
+			<div class="tw-flex tw-flex-wrap tw-items-end tw-gap-3">
+				<a class="ui small button tw-hidden" data-garm-local target="_blank" rel="noopener noreferrer">{{ctx.Locale.Tr "actions.runners.garm_local"}}</a>
+				<form class="ui form ignore-dirty">
+					<div class="field">
+						<label for="vos-garm-url">{{ctx.Locale.Tr "actions.runners.garm_remote"}}</label>
+						<div class="ui action input">
+							<input id="vos-garm-url" type="url" required placeholder="https://garm.example.com/" data-invalid-url="{{ctx.Locale.Tr "actions.runners.garm_invalid_url"}}">
+							<button type="submit" class="ui small button">{{ctx.Locale.Tr "actions.runners.garm_open"}}</button>
+						</div>
+					</div>
+				</form>
+			</div>
+		</div>
+	{{end}}
 	<div class="ui attached segment">
 		<form class="ui form ignore-dirty" id="user-list-search-form" action="{{$.Link}}">
 			{{template "shared/search/combo" dict "Value" .Keyword "Placeholder" (ctx.Locale.Tr "search.runner_kind")}}

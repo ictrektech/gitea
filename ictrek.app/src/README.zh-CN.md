@@ -11,3 +11,5 @@ API 前缀为 `/app/com.ictrek.gitea/api/v1`；同机应用使用 `http://gitea:
 默认同时启动官方 `gitea-mcp` 服务（服务 `gitea-mcp`），在 `/app/com.ictrek.gitea/mcp` 提供无状态 HTTP 端点，供外部 AI Agent 操作仓库。网关强制校验凭据：`Authorization` 必须是 VOS access token 或调用者自己的 Gitea PAT，网关只接受 `Bearer`、`token`、`Basic` 三种写法，前两种等价；无效或无凭据返回 `401`。服务端不保存凭据，权限按该用户生效；只开放 repository、file、branch、pull_request、issue 五类工具，创建仓库需 PAT 含 `write:user`。不匹配的 `Origin` 会被拒绝。
 
 升级保留原路径。本应用不会迁移或删除已安装 GitLab 的账户、仓库或数据。
+
+在 Gitea 的 Actions → Runners，可打开自动发现的同机 GARM，或填写其他节点的完整 HTTP/HTTPS GARM URL。地址保存在当前浏览器。探测不到同机 GARM 时，原生 Runner 管理照常可用。该入口只负责导航，Runner 仍需按 Gitea 原生协议注册。
