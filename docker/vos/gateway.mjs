@@ -1,6 +1,7 @@
 import http from 'node:http';
 import {createHash, randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
+import {parseEntityPath, extractRunsOn, mergeLabels} from './garm_register.mjs';
 import {fileURLToPath} from 'node:url';
 
 export const BASE = '/app/com.ictrek.gitea';
@@ -62,8 +63,10 @@ export function credential(authorization) {
   const name = decoded.slice(0, colon), pass = decoded.slice(colon + 1);
   return pass === '' || pass === 'x-oauth-basic' ? name : pass; // Gitea reads the username as the token for these forms
 }
-export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', mcpUpstream = 'http://gitea-mcp:8080', fetcher = fetch}) {
+export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', mcpUpstream = 'http://gitea-mcp:8080', garmBase = '', fetcher = fetch}) {
   const sessions = new Map();
+  // GARM runs on the same VOS device and is reached over the internal gateway.
+  const garm = `${String(garmBase || process.env.VOS_GARM_URL || new URL(userinfoUrl).origin).replace(/\/$/, '')}/app/com.ictrek.garm`;
   const id = req => (req.headers.cookie || '').split(';').map(x => x.trim().split('=')).find(([k]) => k === 'gitea_vos_session')?.[1];
   const json = (res, data) => respond(res, 200, JSON.stringify(data), 'application/json');
   const cookie = (req, value, age = 43200) => `gitea_vos_session=${value}; Path=${BASE}/; HttpOnly; SameSite=Strict; Max-Age=${age}${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}`;
@@ -113,6 +116,7 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         return;
       }
       if (path === '/vos/bridge.js' && req.method === 'GET') return respond(res, 200, await readFile(new URL('bridge.js', ROOT)), 'text/javascript; charset=utf-8');
+      if (path === '/vos/garm-register.js' && req.method === 'GET') return respond(res, 200, await readFile(new URL('garm-register.js', ROOT)), 'text/javascript; charset=utf-8');
       if (path === '/vos/login') {
         if (req.method !== 'POST' || !sameOrigin(req)) return respond(res, 403);
         const {access_token: token, locale} = await body(req);
@@ -144,6 +148,31 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
       if (auth.kind === 'session' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !sameOrigin(req)) return respond(res, 403);
       if (path.startsWith('/vos/') && !auth.user) return respond(res, 401);
       if (path === '/vos/session') return json(res, {username: auth.user.username});
+      if (path === '/vos/garm/register') {
+        if (req.method !== 'POST') return respond(res, 405, 'Method not allowed');
+        if (auth.kind !== 'session') return respond(res, 401, 'Session required');
+        const session = sessions.get(id(req));
+        if (!session) return respond(res, 401, 'Session required');
+        let payload;
+        try { payload = await body(req); } catch { return respond(res, 400, 'Invalid request'); }
+        const entity = parseEntityPath(typeof payload?.page === 'string' ? payload.page : '', BASE);
+        if (!entity) return respond(res, 400, 'Not an organization or repository page');
+        // Only the identity headers: the client headers belong to another request.
+        const headers = {
+          accept: 'application/json',
+          'x-webauth-user': auth.user.username,
+          'x-webauth-email': `${auth.user.username}@vos.invalid`,
+          'x-vos-admin': String(auth.user.admin),
+          'x-forwarded-proto': req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http',
+        };
+        try {
+          const result = await registerEntity({entity, token: session.token, headers, upstream, garm});
+          return json(res, result);
+        } catch (error) {
+          const status = [400, 401, 403, 404, 409].includes(error.status) ? error.status : 502;
+          return respond(res, status === 401 ? 403 : status, error.message);
+        }
+      }
       if (path === '/vos/locale') {
         if (req.method !== 'POST' || !sameOrigin(req) || auth.kind !== 'session') return respond(res, 403);
         sessions.get(id(req)).locale = language((await body(req)).locale); return respond(res, 204);
@@ -188,6 +217,79 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
   server.on('close', () => sessions.clear());
   return server;
 }
+const WORKFLOW_DIRS = ['.gitea/workflows', '.github/workflows'];
+const ORG_REPO_LIMIT = 10;
+
+function statusError(message, status) {
+  return Object.assign(new Error(message), {status});
+}
+
+function parseJSON(text) {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+// registerEntity asks GARM for the entity, then installs the webhook with the
+// caller identity so Gitea itself decides who may manage the entity.
+export async function registerEntity({entity, token, headers, upstream = 'http://127.0.0.1:3000', garm = ''}) {
+  // Gitea and GARM calls always use the network; only VOS verification is stubbable.
+  const fetchImpl = fetch;
+  const {owner, repo} = entity;
+  const signal = AbortSignal.timeout(10000);
+  const api = async (path, init = {}) => {
+    const response = await fetchImpl(new URL(`${BASE}${path}`, upstream), {...init, headers: {...headers, ...(init.headers || {})}, signal});
+    const text = await response.text();
+    if (!response.ok) throw statusError(`${init.method || 'GET'} ${path} returned ${response.status}: ${text.slice(0, 200)}`, response.status);
+    return text ? parseJSON(text) : null;
+  };
+
+  const repos = repo ? [repo] : ((await api(`/api/v1/orgs/${encodeURIComponent(owner)}/repos?limit=${ORG_REPO_LIMIT}`).catch(() => [])) || []).map(item => item.name).slice(0, ORG_REPO_LIMIT);
+  const discovered = await Promise.allSettled(repos.map(name => workflowLabels(api, owner, name)));
+  const labels = mergeLabels(discovered.filter(item => item.status === 'fulfilled').map(item => item.value));
+
+  const ensure = await fetchImpl(`${garm}/api/v1/vos/ensure`, {
+    method: 'POST',
+    headers: {authorization: `Bearer ${token}`, 'content-type': 'application/json'},
+    body: JSON.stringify({forge: 'gitea', owner, repo, labels}),
+    signal,
+  }).catch(error => { throw statusError(`GARM is unreachable: ${error.message}`, 502); });
+  const ensureBody = await ensure.text();
+  const ensured = parseJSON(ensureBody) || {};
+  if (!ensure.ok) throw statusError(`GARM returned ${ensure.status}: ${ensureBody.slice(0, 200)}`, ensure.status);
+
+  const hooksPath = `/api/v1/${repo ? `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}` : `orgs/${encodeURIComponent(owner)}`}/hooks`;
+  const wanted = String(ensured.webhook_url || '').replace(/\/$/, '');
+  if (!wanted) throw statusError('GARM did not return a webhook URL', 502);
+  const hooks = await api(hooksPath).catch(error => { if (error.status === 404) return []; throw error; });
+  let webhook = 'present';
+  if (!(hooks || []).some(hook => String(hook?.config?.url || '').replace(/\/$/, '').toLowerCase() === wanted.toLowerCase())) {
+    await api(hooksPath, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({type: 'gitea', active: true, events: ['workflow_job'], config: {url: wanted, content_type: 'json', secret: String(ensured.webhook_secret || '')}}),
+    });
+    webhook = 'installed';
+  }
+
+  return {labels, created: ensured.created || [], existing: ensured.existing || [], webhook};
+}
+
+// workflowLabels returns the runs-on labels of every workflow file of a repo.
+// shortcut: the files are read as text and matched, not parsed as YAML.
+async function workflowLabels(api, owner, repo) {
+  const lists = [];
+  for (const dir of WORKFLOW_DIRS) {
+    const entries = await api(`/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${dir}`).catch(() => null);
+    if (!Array.isArray(entries)) continue;
+    const names = entries.filter(entry => entry.type === 'file' && /\.ya?ml$/i.test(entry.name)).map(entry => entry.name);
+    const files = await Promise.allSettled(names.map(name => api(`/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${dir}/${encodeURIComponent(name)}`)));
+    for (const file of files) {
+      if (file.status !== 'fulfilled' || !file.value?.content) continue;
+      lists.push(extractRunsOn(Buffer.from(file.value.content, 'base64').toString('utf8')));
+    }
+  }
+  return mergeLabels(lists);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (!process.env.VOS_USERINFO_URL) throw Error('VOS_USERINFO_URL is required');
   createGateway({userinfoUrl: process.env.VOS_USERINFO_URL}).listen(8080, '0.0.0.0');
