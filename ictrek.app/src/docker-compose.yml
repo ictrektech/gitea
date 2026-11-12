@@ -9,7 +9,7 @@ x-gitea: &gitea
     VOS_POSTGRES_PASSWORD: ${VOS_POSTGRES_PASSWORD:?PGV bootstrap credentials are required}
     GITEA_SSH_PORT: ${GITEA_SSH_PORT:-32222}
     GITEA_SSH_DOMAIN: ${GITEA_SSH_DOMAIN:-}
-    GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-http://gitea:8080/app/com.ictrek.gitea/}
+    GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-http://172.17.0.1:1182/app/com.ictrek.gitea/}
   ports:
     - "${GITEA_SSH_PORT:-32222}:2222"
   volumes:

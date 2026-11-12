@@ -35,4 +35,4 @@ configs:
     description:
       zh-CN: Actions checkout、任务 API 和 Webhook 使用的标准地址。外部 Runner 请填写设备可达地址，例如 https://设备IP:1180/app/com.ictrek.gitea/；默认值适合同一 VOS 网络的服务。
       en: Canonical URL for Actions checkout, job APIs and webhooks. External runners need a reachable device URL such as https://HOST:1180/app/com.ictrek.gitea/; the default is for the same VOS network.
-    default: http://gitea:8080/app/com.ictrek.gitea/
+    default: http://172.17.0.1:1182/app/com.ictrek.gitea/
