@@ -200,13 +200,16 @@ test('MCP endpoint requires a VOS token or a valid Gitea PAT', async t => {
 
 test('register route provisions the entity and installs the webhook once', async t => {
   const fetcher = async () => ({ok: true, json: async () => ({sub: 'account-1', preferred_username: 'alice', enable: 1, role_code: 'user'})});
-  const giteaCalls = [], garmCalls = [], mintedFor = [];
+  const giteaCalls = [], garmCalls = [], mintedFor = [], identities = [];
   let hooks = [];
   const upstream = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    giteaCalls.push({method: req.method, path: url.pathname, user: req.headers['x-webauth-user'], subject: req.headers['x-vos-subject']});
+    giteaCalls.push({method: req.method, path: url.pathname, user: req.headers['x-webauth-user'], subject: req.headers['x-vos-subject'], length: req.headers['content-length']});
     // The account keeps the name it already had, which is not the session name.
-    if (url.pathname.endsWith('/api/v1/user')) return res.end(JSON.stringify({login: 'admin'}));
+    if (url.pathname.endsWith('/api/v1/user')) {
+      identities.push(req.headers['x-webauth-email']);
+      return res.end(JSON.stringify({login: 'admin', email: req.headers['x-webauth-email']}));
+    }
     if (url.pathname.endsWith('/contents/.gitea/workflows')) return res.end(JSON.stringify([{type: 'file', name: 'ci.yml'}]));
     if (url.pathname.endsWith('/contents/.gitea/workflows/ci.yml')) return res.end(JSON.stringify({content: Buffer.from('jobs:\n  build:\n    runs-on: [garm-pools, linux]\n').toString('base64')}));
     if (url.pathname.endsWith('/contents/.github/workflows')) {res.writeHead(404); return res.end('{}');}
@@ -245,6 +248,8 @@ test('register route provisions the entity and installs the webhook once', async
   assert.equal(giteaCalls[0].user, username('account-1'), 'Gitea sees the caller identity');
   assert.ok(giteaCalls.every(call => call.subject === 'account-1'), 'every call carries the VOS subject');
   assert.deepEqual(mintedFor, ['admin'], 'the token is minted for the account Gitea resolved');
+  assert.ok(giteaCalls.filter(call => call.method === 'GET').every(call => call.length === undefined), 'a read never carries the size of the register request body');
+  assert.deepEqual(identities, [`${username('account-1')}@vos.invalid`], 'the account must carry the email of this caller');
   assert.equal(giteaCalls.at(-1).method, 'POST', 'the missing webhook is created');
 
   const second = await register();
@@ -260,6 +265,37 @@ test('register route provisions the entity and installs the webhook once', async
     assert.equal(response.status, 400, label);
   }
   assert.equal((await fetch(base + '/vos/garm/register', {method: 'POST', headers: {origin, 'content-type': 'application/json'}, body: '{"page":"x"}'})).status, 401, 'a session is required');
+});
+
+test('register refuses an identity that Gitea does not confirm', async t => {
+  for (const [label, status, body, expected] of [
+    ['a rejected identity', 401, {message: 'unauthorized'}, 403],
+    ['another account', 200, {login: 'someone', email: 'someone@vos.invalid'}, 502],
+  ]) {
+    const minted = [], garmCalls = [];
+    const upstream = http.createServer((req, res) => {
+      if (req.url.endsWith('/api/v1/user')) { res.writeHead(status, {'content-type': 'application/json'}); return res.end(JSON.stringify(body)); }
+      res.end('{}');
+    });
+    upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
+    const garm = http.createServer((req, res) => { garmCalls.push(req.url); res.end('{}'); });
+    garm.listen(0, '127.0.0.1'); await once(garm, 'listening');
+    const gateway = createGateway({
+      userinfoUrl: 'http://userinfo', upstream: `http://127.0.0.1:${upstream.address().port}`,
+      garmBase: `http://127.0.0.1:${garm.address().port}`,
+      fetcher: async () => ({ok: true, json: async () => ({sub: 'account-1', preferred_username: 'alice', enable: 1, role_code: 'user'})}),
+      tokenMinter: async login => { minted.push(login); return 'minted-token'; },
+    });
+    gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
+    t.after(() => { for (const server of [gateway, upstream, garm]) {server.closeAllConnections(); server.close();} });
+    const origin = `http://127.0.0.1:${gateway.address().port}`, base = origin + BASE;
+    const login = await fetch(base + '/vos/login', {method: 'POST', headers: {origin, 'content-type': 'application/json'}, body: JSON.stringify({access_token: 'token'})});
+    const cookie = login.headers.get('set-cookie').split(';')[0];
+    const response = await fetch(base + '/vos/garm/register', {method: 'POST', headers: {cookie, origin, 'content-type': 'application/json'}, body: JSON.stringify({page: `${BASE}/acme/ci-test/settings/actions/runners`})});
+    assert.equal(response.status, expected, label);
+    assert.deepEqual(minted, [], 'no token is minted for an unconfirmed identity');
+    assert.deepEqual(garmCalls, [], 'GARM is not asked to provision anything');
+  }
 });
 
 test('callerToken keeps the failing line of the CLI and reuses a cached token', async () => {

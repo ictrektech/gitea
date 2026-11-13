@@ -171,7 +171,7 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         const headers = upstreamHeaders(req, auth.user, session.locale);
         for (const key of ['cookie', 'content-length', 'content-type', 'expect']) delete headers[key];
         try {
-          const result = await registerEntity({entity, token: session.token, mintToken: login => tokenMinter(login), headers, upstream, garm});
+          const result = await registerEntity({entity, token: session.token, mintToken: tokenMinter, headers, upstream, garm});
           return json(res, result);
         } catch (error) {
           const status = [400, 401, 403, 404, 409].includes(error.status) ? error.status : 502;
@@ -261,6 +261,12 @@ export async function registerEntity({entity, token, mintToken, headers, upstrea
     });
     login = String(me?.login || '');
     if (!login) throw statusError('Gitea did not return the account name', 502);
+    // Gitea's reverse proxy falls back to the account that owns the email when it
+    // cannot resolve the identity; a token must never be minted for that account.
+    const email = String(me.email || '').toLowerCase();
+    if (email && email !== String(headers['x-webauth-email'] || '').toLowerCase()) {
+      throw statusError(`Gitea resolved another account: ${login}`, 502);
+    }
   }
   const giteaToken = mintToken ? await mintToken(login) : '';
 
