@@ -13,3 +13,5 @@ The app also runs the official `gitea-mcp` server (service `gitea-mcp`), exposin
 Keep the same storage paths on upgrades. Existing GitLab accounts, repositories and data are not migrated or removed.
 
 Under Actions → Runners, open the discovered local GARM or enter the full HTTP/HTTPS URL of a GARM instance on another device. The address stays in the current browser. Native runner management remains available when local GARM is absent. Opening GARM does not register a runner.
+
+On VOS with Traefik v3, opening the app root directly in a browser redirects to its VOS page. Embedded pages and API requests use their existing routes.
