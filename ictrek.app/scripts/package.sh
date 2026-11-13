@@ -332,7 +332,7 @@ verify_package() {
   if printf '%s\n' "$compose_text" | awk '/^[[:space:]]*image:/ {print $2}' | grep -v '^[^/[:space:]]\+\.[^/[:space:]]\+/' | grep -q .; then
     die "docker-compose.yml contains short image reference"
   fi
-  if ! printf '%s\n' "$compose_text" | grep -Fq 'HeadersRegexp(`Sec-Fetch-Dest`, `document`)'; then
+  if ! printf '%s\n' "$compose_text" | grep -Fq 'HeaderRegexp(`Sec-Fetch-Dest`, `document`)'; then
     die "docker-compose.yml must redirect top-level document opens to VOS hash route"
   fi
   if ! printf '%s\n' "$compose_text" | grep -Fq "${ROUTER_HASH_PATH}"; then

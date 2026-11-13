@@ -13,3 +13,5 @@ API 前缀为 `/app/com.ictrek.gitea/api/v1`；同机应用使用 `http://gitea:
 升级保留原路径。本应用不会迁移或删除已安装 GitLab 的账户、仓库或数据。
 
 在 Gitea 的 Actions → Runners，可打开自动发现的同机 GARM，或填写其他节点的完整 HTTP/HTTPS GARM URL。地址保存在当前浏览器。探测不到同机 GARM 时，原生 Runner 管理照常可用。该入口只负责导航，Runner 仍需按 Gitea 原生协议注册。
+
+在使用 Traefik v3 的 VOS 上，从浏览器直接打开应用根地址会跳转到 VOS 应用页面。嵌入页面和 API 请求沿用原有路由。
