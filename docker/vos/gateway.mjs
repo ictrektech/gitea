@@ -254,8 +254,12 @@ export async function registerEntity({entity, token, mintToken, headers, upstrea
   const discovered = await Promise.allSettled(repos.map(name => workflowLabels(api, owner, name)));
   const labels = mergeLabels(discovered.filter(item => item.status === 'fulfilled').map(item => item.value));
 
-  // The token is minted after the label reads: Gitea creates the reverse proxy
-  // account on the first call, so it exists only from then on.
+  // Gitea creates the reverse proxy account on the first request made as that
+  // user, and the token can only be minted for an existing account.
+  if (mintToken) {
+    try { await api('/api/v1/user'); }
+    catch (error) { throw statusError(`Gitea did not create the account: ${error.message}`, error.status || 502); }
+  }
   const giteaToken = mintToken ? await mintToken() : '';
 
   const ensure = await fetchImpl(`${garm}/api/v1/vos/ensure`, {
@@ -295,19 +299,27 @@ export async function registerEntity({entity, token, mintToken, headers, upstrea
 // private configuration. The token lets GARM act after the browser is gone.
 export async function callerToken(username, options = {}) {
   const exec = options.exec || execute;
+  const secretsPath = options.secretsPath || SECRETS_PATH;
   let secrets = {};
-  try { secrets = JSON.parse(await readFile(SECRETS_PATH, 'utf8')); } catch { /* A missing file is replaced below. */ }
+  try { secrets = JSON.parse(await readFile(secretsPath, 'utf8')); } catch { /* A missing file is replaced below. */ }
   const cached = secrets.garmTokens?.[username];
   if (cached) return cached;
 
-  const {stdout} = await exec(GITEA_BIN, tokenArgs(username, GITEA_CONFIG), {
-    env: {...process.env, GITEA_WORK_DIR: process.env.GITEA_WORK_DIR || '/data/gitea'},
-    timeout: 20000,
-  });
+  let stdout;
+  try {
+    ({stdout} = await exec(GITEA_BIN, tokenArgs(username, GITEA_CONFIG), {
+      env: {...process.env, GITEA_WORK_DIR: process.env.GITEA_WORK_DIR || '/data/gitea'},
+      timeout: 20000,
+    }));
+  } catch (error) {
+    // The CLI prints warnings before the failure; only the last line explains it.
+    const lines = String(error.stderr || error.message || '').split('\n').map(line => line.trim()).filter(Boolean);
+    throw new Error(`Gitea refused the token: ${lines.at(-1) || 'unknown error'}`);
+  }
   const token = String(stdout).trim();
   if (!token) throw new Error('Gitea returned an empty token');
   secrets.garmTokens = {...(secrets.garmTokens || {}), [username]: token};
-  await writeFile(SECRETS_PATH, JSON.stringify(secrets), {mode: 0o600}).catch(() => {});
+  await writeFile(secretsPath, JSON.stringify(secrets), {mode: 0o600}).catch(() => {});
   return token;
 }
 

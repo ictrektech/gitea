@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 import vm from 'node:vm';
-import {createGateway, BASE, verify, username, upstreamHeaders, credential} from './gateway.mjs';
+import {createGateway, BASE, verify, username, upstreamHeaders, credential, callerToken} from './gateway.mjs';
 
 test('verified VOS identity is stable across renames and rejects disabled users', async () => {
   let claims = {sub: 'account-1', preferred_username: 'alice', enable: 1, role_code: 'user'};
@@ -256,4 +256,21 @@ test('register route provisions the entity and installs the webhook once', async
     assert.equal(response.status, 400, label);
   }
   assert.equal((await fetch(base + '/vos/garm/register', {method: 'POST', headers: {origin, 'content-type': 'application/json'}, body: '{"page":"x"}'})).status, 401, 'a session is required');
+});
+
+test('callerToken keeps the failing line of the CLI and reuses a cached token', async () => {
+  const exec = async () => {
+    const error = new Error('Command failed: /usr/local/bin/gitea admin user generate-access-token');
+    error.stderr = 'loadCommonSettingsFrom() [W] warning\nCommand error: user does not exist [uid: 0]\n';
+    throw error;
+  };
+  const usernameArg = 'vos-' + 'a'.repeat(24);
+  await assert.rejects(
+    callerToken(usernameArg, {exec, secretsPath: '/nonexistent/secrets.json'}),
+    /Gitea refused the token: Command error: user does not exist/,
+  );
+
+  const cache = '/tmp/garm-token-cache.json';
+  await import('node:fs/promises').then(fs => fs.writeFile(cache, JSON.stringify({garmTokens: {[usernameArg]: 'cached'}})));
+  assert.equal(await callerToken(usernameArg, {exec, secretsPath: cache}), 'cached');
 });
