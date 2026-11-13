@@ -45,6 +45,26 @@ export function extractRunsOn(text) {
   return labels;
 }
 
+// tokenArgs returns the arguments that mint a token for a VOS user in Gitea.
+// The username comes from the session, but it is checked again before it
+// reaches the command line.
+export function tokenArgs(username, configPath) {
+  if (!/^vos-[a-f0-9]{24}$/.test(String(username))) throw new Error('unexpected Gitea username');
+  return ['admin', 'user', 'generate-access-token', '--username', username, '--token-name', 'garm-vos', '--scopes', 'all', '--raw', '--config', configPath];
+}
+
+// staleHooks returns the hooks that point at another controller of the same
+// GARM instance.
+export function staleHooks(hooks, wanted) {
+  const normalized = String(wanted || '').replace(/\/$/, '');
+  const prefix = normalized.slice(0, normalized.lastIndexOf('/') + 1);
+  if (!prefix) return [];
+  return (hooks || []).filter(hook => {
+    const url = String(hook?.config?.url || '').replace(/\/$/, '');
+    return url.toLowerCase().startsWith(prefix.toLowerCase()) && url.toLowerCase() !== normalized.toLowerCase();
+  });
+}
+
 // mergeLabels deduplicates labels and applies the limits of the GARM API.
 export function mergeLabels(lists) {
   const merged = [];

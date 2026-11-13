@@ -1,7 +1,15 @@
 import http from 'node:http';
 import {createHash, randomBytes} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
-import {parseEntityPath, extractRunsOn, mergeLabels} from './garm_register.mjs';
+import {readFile, writeFile} from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {parseEntityPath, extractRunsOn, mergeLabels, staleHooks, tokenArgs} from './garm_register.mjs';
+
+const execute = promisify(execFile);
+const GITEA_BIN = process.env.GITEA_BIN || '/usr/local/bin/gitea';
+const GITEA_CONFIG = process.env.GITEA_CONFIG || '/config/conf/app.ini';
+const SECRETS_PATH = process.env.GITEA_SECRETS || '/config/conf/secrets.json';
+const CALLER_TOKEN_NAME = 'garm-vos';
 import {fileURLToPath} from 'node:url';
 
 export const BASE = '/app/com.ictrek.gitea';
@@ -63,7 +71,7 @@ export function credential(authorization) {
   const name = decoded.slice(0, colon), pass = decoded.slice(colon + 1);
   return pass === '' || pass === 'x-oauth-basic' ? name : pass; // Gitea reads the username as the token for these forms
 }
-export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', mcpUpstream = 'http://gitea-mcp:8080', garmBase = '', fetcher = fetch}) {
+export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', mcpUpstream = 'http://gitea-mcp:8080', garmBase = '', fetcher = fetch, tokenMinter = callerToken}) {
   const sessions = new Map();
   // GARM runs on the same VOS device and is reached over the internal gateway.
   const garm = `${String(garmBase || process.env.VOS_GARM_URL || new URL(userinfoUrl).origin).replace(/\/$/, '')}/app/com.ictrek.garm`;
@@ -166,7 +174,7 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
           'x-forwarded-proto': req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http',
         };
         try {
-          const result = await registerEntity({entity, token: session.token, headers, upstream, garm});
+          const result = await registerEntity({entity, token: session.token, mintToken: () => tokenMinter(auth.user.username), headers, upstream, garm});
           return json(res, result);
         } catch (error) {
           const status = [400, 401, 403, 404, 409].includes(error.status) ? error.status : 502;
@@ -230,7 +238,7 @@ function parseJSON(text) {
 
 // registerEntity asks GARM for the entity, then installs the webhook with the
 // caller identity so Gitea itself decides who may manage the entity.
-export async function registerEntity({entity, token, headers, upstream = 'http://127.0.0.1:3000', garm = ''}) {
+export async function registerEntity({entity, token, mintToken, headers, upstream = 'http://127.0.0.1:3000', garm = ''}) {
   // Gitea and GARM calls always use the network; only VOS verification is stubbable.
   const fetchImpl = fetch;
   const {owner, repo} = entity;
@@ -246,10 +254,14 @@ export async function registerEntity({entity, token, headers, upstream = 'http:/
   const discovered = await Promise.allSettled(repos.map(name => workflowLabels(api, owner, name)));
   const labels = mergeLabels(discovered.filter(item => item.status === 'fulfilled').map(item => item.value));
 
+  // The token is minted after the label reads: Gitea creates the reverse proxy
+  // account on the first call, so it exists only from then on.
+  const giteaToken = mintToken ? await mintToken() : '';
+
   const ensure = await fetchImpl(`${garm}/api/v1/vos/ensure`, {
     method: 'POST',
     headers: {authorization: `Bearer ${token}`, 'content-type': 'application/json'},
-    body: JSON.stringify({forge: 'gitea', owner, repo, labels}),
+    body: JSON.stringify({forge: 'gitea', owner, repo, labels, gitea_token: giteaToken}),
     signal,
   }).catch(error => { throw statusError(`GARM is unreachable: ${error.message}`, 502); });
   const ensureBody = await ensure.text();
@@ -260,6 +272,12 @@ export async function registerEntity({entity, token, headers, upstream = 'http:/
   const wanted = String(ensured.webhook_url || '').replace(/\/$/, '');
   if (!wanted) throw statusError('GARM did not return a webhook URL', 502);
   const hooks = await api(hooksPath).catch(error => { if (error.status === 404) return []; throw error; });
+  // A hook left behind by another controller claims the same events and would
+  // keep failing, so replace it instead of adding a second one.
+  const stale = staleHooks(hooks, wanted);
+  for (const hook of stale) {
+    await api(`${hooksPath}/${hook.id}`, {method: 'DELETE'}).catch(() => {});
+  }
   let webhook = 'present';
   if (!(hooks || []).some(hook => String(hook?.config?.url || '').replace(/\/$/, '').toLowerCase() === wanted.toLowerCase())) {
     await api(hooksPath, {
@@ -270,7 +288,27 @@ export async function registerEntity({entity, token, headers, upstream = 'http:/
     webhook = 'installed';
   }
 
-  return {labels, created: ensured.created || [], existing: ensured.existing || [], webhook};
+  return {labels, created: ensured.created || [], existing: ensured.existing || [], webhook, removed: stale.length};
+}
+
+// callerToken returns a Gitea token of the user, minted once and cached in the
+// private configuration. The token lets GARM act after the browser is gone.
+export async function callerToken(username, options = {}) {
+  const exec = options.exec || execute;
+  let secrets = {};
+  try { secrets = JSON.parse(await readFile(SECRETS_PATH, 'utf8')); } catch { /* A missing file is replaced below. */ }
+  const cached = secrets.garmTokens?.[username];
+  if (cached) return cached;
+
+  const {stdout} = await exec(GITEA_BIN, tokenArgs(username, GITEA_CONFIG), {
+    env: {...process.env, GITEA_WORK_DIR: process.env.GITEA_WORK_DIR || '/data/gitea'},
+    timeout: 20000,
+  });
+  const token = String(stdout).trim();
+  if (!token) throw new Error('Gitea returned an empty token');
+  secrets.garmTokens = {...(secrets.garmTokens || {}), [username]: token};
+  await writeFile(SECRETS_PATH, JSON.stringify(secrets), {mode: 0o600}).catch(() => {});
+  return token;
 }
 
 // workflowLabels returns the runs-on labels of every workflow file of a repo.

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseEntityPath, extractRunsOn, mergeLabels, MAX_LABELS} from './garm_register.mjs';
+import {parseEntityPath, extractRunsOn, mergeLabels, tokenArgs, staleHooks, MAX_LABELS} from './garm_register.mjs';
 
 const BASE = '/app/com.ictrek.gitea';
 
@@ -28,4 +28,22 @@ test('mergeLabels deduplicates and applies the API limits', () => {
   const many = Array.from({length: MAX_LABELS + 4}, (_, index) => `label${index}`);
   assert.equal(mergeLabels([many]).length, MAX_LABELS);
   assert.deepEqual(mergeLabels([['x'.repeat(51), 'y']]), ['y']);
+});
+
+test('tokenArgs refuses names that are not VOS accounts', () => {
+  assert.deepEqual(tokenArgs('vos-0123456789abcdef01234567', '/config/conf/app.ini').slice(0, 5),
+    ['admin', 'user', 'generate-access-token', '--username', 'vos-0123456789abcdef01234567']);
+  assert.throws(() => tokenArgs('admin; rm -rf /', '/config/conf/app.ini'), /unexpected Gitea username/);
+  assert.throws(() => tokenArgs('', '/config/conf/app.ini'), /unexpected Gitea username/);
+});
+
+test('staleHooks keeps only hooks of another controller', () => {
+  const hooks = [
+    {id: 1, config: {url: 'http://172.17.0.1:1182/app/com.ictrek.garm/webhooks/old'}},
+    {id: 2, config: {url: 'http://172.17.0.1:1182/app/com.ictrek.garm/webhooks/new/'}},
+    {id: 3, config: {url: 'http://example.com/other'}},
+  ];
+  assert.deepEqual(staleHooks(hooks, 'http://172.17.0.1:1182/app/com.ictrek.garm/webhooks/new').map(h => h.id), [1]);
+  assert.deepEqual(staleHooks([], 'http://x/y/webhooks/a'), []);
+  assert.deepEqual(staleHooks(hooks, ''), []);
 });

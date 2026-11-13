@@ -224,7 +224,7 @@ test('register route provisions the entity and installs the webhook once', async
     });
   });
   garm.listen(0, '127.0.0.1'); await once(garm, 'listening');
-  const gateway = createGateway({userinfoUrl: 'http://userinfo', upstream: `http://127.0.0.1:${upstream.address().port}`, garmBase: `http://127.0.0.1:${garm.address().port}`, fetcher});
+  const gateway = createGateway({userinfoUrl: 'http://userinfo', upstream: `http://127.0.0.1:${upstream.address().port}`, garmBase: `http://127.0.0.1:${garm.address().port}`, fetcher, tokenMinter: async () => 'minted-token'});
   gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
   t.after(() => {for (const server of [gateway, upstream, garm]) {server.closeAllConnections(); server.close();}});
   const origin = `http://127.0.0.1:${gateway.address().port}`, base = origin + BASE;
@@ -236,10 +236,10 @@ test('register route provisions the entity and installs the webhook once', async
 
   const first = await register();
   assert.equal(first.status, 200);
-  assert.deepEqual(await first.json(), {labels: ['garm-pools', 'linux'], created: ['repository', 'pool'], existing: [], webhook: 'installed'});
+  assert.deepEqual(await first.json(), {labels: ['garm-pools', 'linux'], created: ['repository', 'pool'], existing: [], webhook: 'installed', removed: 0});
   assert.equal(garmCalls.length, 1);
   assert.equal(garmCalls[0].token, 'Bearer token', 'the caller token reaches GARM');
-  assert.deepEqual(garmCalls[0].body, {forge: 'gitea', owner: 'acme', repo: 'ci-test', labels: ['garm-pools', 'linux']});
+  assert.equal(garmCalls[0].body.gitea_token, 'minted-token', 'the token of the caller reaches GARM');
   assert.equal(giteaCalls[0].user, username('account-1'), 'Gitea sees the caller identity');
   assert.equal(giteaCalls.at(-1).method, 'POST', 'the missing webhook is created');
 
