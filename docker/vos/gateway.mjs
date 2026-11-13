@@ -165,16 +165,13 @@ export function createGateway({userinfoUrl, upstream = 'http://127.0.0.1:3000', 
         try { payload = await body(req); } catch { return respond(res, 400, 'Invalid request'); }
         const entity = parseEntityPath(typeof payload?.page === 'string' ? payload.page : '', BASE);
         if (!entity) return respond(res, 400, 'Not an organization or repository page');
-        // Only the identity headers: the client headers belong to another request.
-        const headers = {
-          accept: 'application/json',
-          'x-webauth-user': auth.user.username,
-          'x-webauth-email': `${auth.user.username}@vos.invalid`,
-          'x-vos-admin': String(auth.user.admin),
-          'x-forwarded-proto': req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http',
-        };
+        // The same identity headers a page request carries, so Gitea resolves the
+        // account the way it does for every other request of the session. The
+        // headers of this request describe its own body, not the calls made below.
+        const headers = upstreamHeaders(req, auth.user, session.locale);
+        for (const key of ['cookie', 'content-length', 'content-type', 'expect']) delete headers[key];
         try {
-          const result = await registerEntity({entity, token: session.token, mintToken: () => tokenMinter(auth.user.username), headers, upstream, garm});
+          const result = await registerEntity({entity, token: session.token, mintToken: login => tokenMinter(login), headers, upstream, garm});
           return json(res, result);
         } catch (error) {
           const status = [400, 401, 403, 404, 409].includes(error.status) ? error.status : 502;
@@ -254,13 +251,18 @@ export async function registerEntity({entity, token, mintToken, headers, upstrea
   const discovered = await Promise.allSettled(repos.map(name => workflowLabels(api, owner, name)));
   const labels = mergeLabels(discovered.filter(item => item.status === 'fulfilled').map(item => item.value));
 
-  // Gitea creates the reverse proxy account on the first request made as that
-  // user, and the token can only be minted for an existing account.
+  // Gitea resolves the account from the VOS identity and creates it on the first
+  // request made as that user. The login is not always the session name: an
+  // account that already exists keeps its own name, so it is read back.
+  let login = '';
   if (mintToken) {
-    try { await api('/api/v1/user'); }
-    catch (error) { throw statusError(`Gitea did not create the account: ${error.message}`, error.status || 502); }
+    const me = await api('/api/v1/user').catch(error => {
+      throw statusError(`Gitea did not accept the identity: ${error.message}`, error.status || 502);
+    });
+    login = String(me?.login || '');
+    if (!login) throw statusError('Gitea did not return the account name', 502);
   }
-  const giteaToken = mintToken ? await mintToken() : '';
+  const giteaToken = mintToken ? await mintToken(login) : '';
 
   const ensure = await fetchImpl(`${garm}/api/v1/vos/ensure`, {
     method: 'POST',

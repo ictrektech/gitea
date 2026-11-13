@@ -30,10 +30,13 @@ test('mergeLabels deduplicates and applies the API limits', () => {
   assert.deepEqual(mergeLabels([['x'.repeat(51), 'y']]), ['y']);
 });
 
-test('tokenArgs refuses names that are not VOS accounts', () => {
+test('tokenArgs refuses names that are not Gitea accounts', () => {
   assert.deepEqual(tokenArgs('vos-0123456789abcdef01234567', '/config/conf/app.ini').slice(0, 5),
     ['admin', 'user', 'generate-access-token', '--username', 'vos-0123456789abcdef01234567']);
+  assert.deepEqual(tokenArgs('admin', '/config/conf/app.ini').slice(3, 5),
+    ['--username', 'admin'], 'an existing account keeps its own name');
   assert.throws(() => tokenArgs('admin; rm -rf /', '/config/conf/app.ini'), /unexpected Gitea username/);
+  assert.throws(() => tokenArgs('-rf', '/config/conf/app.ini'), /unexpected Gitea username/);
   assert.throws(() => tokenArgs('', '/config/conf/app.ini'), /unexpected Gitea username/);
 });
 

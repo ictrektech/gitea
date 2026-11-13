@@ -45,11 +45,11 @@ export function extractRunsOn(text) {
   return labels;
 }
 
-// tokenArgs returns the arguments that mint a token for a VOS user in Gitea.
-// The username comes from the session, but it is checked again before it
-// reaches the command line.
+// tokenArgs returns the arguments that mint a token for a Gitea account. The
+// name comes from Gitea itself, but it is checked again before it reaches the
+// command line.
 export function tokenArgs(username, configPath) {
-  if (!/^vos-[a-f0-9]{24}$/.test(String(username))) throw new Error('unexpected Gitea username');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,38}$/.test(String(username))) throw new Error('unexpected Gitea username');
   return ['admin', 'user', 'generate-access-token', '--username', username, '--token-name', 'garm-vos', '--scopes', 'all', '--raw', '--config', configPath];
 }
 
