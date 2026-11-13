@@ -45,7 +45,7 @@ NAS 目录权限独立于 Gitea 仓库权限：能直接读取数据目录的用
 
 ## PGV、SSH 与 Actions
 
-应用依赖已发布的 PGV；打包时从其最新 GitHub Release 验证实际版本，并写入 manifest。首次启动通过 VOS 提供的 PGV 管理凭据创建专用 `gitea` 数据库和非超级用户，随机密码保存在私有配置中；Gitea 子进程仅收到专用连接配置。已有数据库或角色的密码不匹配时停止初始化，不自动重置，不修改其他应用数据库。恢复安装时需一起恢复私有配置和数据库。
+应用依赖已发布的 PGV；打包时从其最新 GitHub Release 验证实际版本，并写入 manifest。首次启动通过 VOS 提供的 PGV 管理凭据创建专用 `gitea` 数据库和非超级用户，随机密码保存在私有配置中；Gitea 子进程仅收到专用连接配置。重装后私有配置丢失时，凭 VOS 管理凭据把专用角色密码改为本次新生成的值，继续使用已有数据库，无需手工修复；数据库属于其他角色时停止初始化，不修改其他应用数据库。需要全新实例时，先删除 PGV 的 `gitea` 数据库与角色，再清空数据目录并重启。恢复安装时需一起恢复私有配置和数据库。
 
 SSH 默认映射宿主机 `32222` 到容器 `2222` 的内置 SSH 服务器，与宿主机管理用 22 端口分离。安装可配置 `GITEA_SSH_PORT`、`GITEA_SSH_DOMAIN`；域名留空时按页面当前访问地址生成 clone URL。公钥在“用户设置 → SSH / GPG 密钥”添加，私钥留在客户端。
 
@@ -69,7 +69,7 @@ Git 操作只在本地执行。先 rsync 当前源码到目标机器的 `~/dev/r
 构建机上的验证入口：
 
 ```bash
-node --test docker/vos/gateway.test.mjs
+node --test docker/vos/database.test.mjs docker/vos/gateway.test.mjs docker/vos/runner_token.test.mjs
 python3 ictrek.app/scripts/verify_runtime.py --image <候选镜像> --postgres-image <已发布PGV镜像>
 ```
 
