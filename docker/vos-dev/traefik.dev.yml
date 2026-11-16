@@ -1,0 +1,21 @@
+# Written by docker/vos-dev/vos-dev.sh; removed on exit.
+# Priority 2000 outranks the installed app router, so platform traffic reaches the dev container.
+http:
+  routers:
+    __NAME__-dev:
+      rule: "PathPrefix(`/app/__APP_ID__`)"
+      service: __NAME__-dev
+      priority: 2000
+      middlewares:
+        - __NAME__-dev-slash
+  middlewares:
+    __NAME__-dev-slash:
+      redirectRegex:
+        regex: '^(.*)/app/__APP_ID__$'
+        replacement: '${1}/app/__APP_ID__/'
+        permanent: true
+  services:
+    __NAME__-dev:
+      loadBalancer:
+        servers:
+          - url: "http://__HOST__:__PORT__"

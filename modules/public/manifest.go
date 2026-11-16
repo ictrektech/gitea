@@ -34,8 +34,9 @@ type manifestDataStruct struct {
 }
 
 var (
-	manifestData atomic.Pointer[manifestDataStruct]
-	manifestFS   = sync.OnceValue(AssetFS)
+	manifestData      atomic.Pointer[manifestDataStruct]
+	emptyManifestData = &manifestDataStruct{}
+	manifestFS        = sync.OnceValue(AssetFS)
 )
 
 const manifestPath = "assets/.vite/manifest.json"
@@ -63,8 +64,14 @@ func reloadManifest(existingData *manifestDataStruct) *manifestDataStruct {
 
 	f, err := manifestFS().Open(manifestPath)
 	if err != nil {
+		// keep the check time, otherwise every caller retries and logs again within the same second
+		failed := &manifestDataStruct{checkTime: now}
+		if data != nil {
+			failed.entries, failed.names, failed.modTime = data.entries, data.names, data.modTime
+		}
+		manifestData.Store(failed)
 		log.Error("Failed to open frontend manifest: %v", err)
-		return data
+		return failed
 	}
 	defer f.Close()
 
@@ -101,13 +108,18 @@ func storeManifestFromBytes(manifestContent []byte, modTime int64, checkTime tim
 func getManifestData() *manifestDataStruct {
 	data := manifestData.Load()
 
+	// the dev server serves the sources, "manifest.json" is only written by a build and is not expected to exist
+	if IsViteDevMode() {
+		return emptyManifestData
+	}
+
 	// In production the manifest is immutable (embedded in the binary).
 	// In dev mode, check if it changed on disk (for watch-frontend).
 	if data == nil || !setting.IsProd {
 		data = reloadManifest(data)
 	}
 	if data == nil {
-		data = &manifestDataStruct{}
+		data = emptyManifestData
 	}
 	return data
 }

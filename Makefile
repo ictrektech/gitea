@@ -364,6 +364,22 @@ watch-frontend: node_modules ## start vite dev server for frontend
 watch-backend: ## watch backend files and continuously rebuild
 	GITEA_RUN_MODE=dev $(GO) run $(AIR_PACKAGE) -c .air.toml
 
+.PHONY: vos-dev
+vos-dev: ## debug inside VOS with source mounted (air rebuild + vite HMR)
+	@bash docker/vos-dev/vos-dev.sh up
+
+.PHONY: vos-dev-down
+vos-dev-down: ## stop the VOS dev container and remove its route
+	@bash docker/vos-dev/vos-dev.sh down
+
+.PHONY: vos-dev-logs
+vos-dev-logs: ## follow the VOS dev container log
+	@bash docker/vos-dev/vos-dev.sh logs
+
+.PHONY: vos-dev-status
+vos-dev-status: ## show VOS dev container, health and route state
+	@bash docker/vos-dev/vos-dev.sh status
+
 .PHONY: test-backend
 test-backend: ## test backend files
 	@echo "Running go test with $(GOTEST_FLAGS) -tags '$(TAGS)'..."

@@ -133,7 +133,10 @@ function iifePlugin(sourceFileName: string): Plugin {
 
       server.middlewares.use((req, res, next) => {
         // on the dev server, an "iife" file is a virtual file in memory, serve it directly
-        const pathname = req.url!.split('?')[0];
+        // this middleware runs before Vite's base middleware, so a proxied request still carries the base
+        const url = req.url!.split('?')[0];
+        const base = server.config.base;
+        const pathname = url.startsWith(base) ? url.slice(base.length - 1) : url;
         if (pathname === '/web_src/js/__vite_dev_server_check') {
           res.end('ok');
         } else if (pathname === `/web_src/js/${sourceFileName}`) {
@@ -202,8 +205,9 @@ function filterCssUrlPlugin(): Plugin {
 
 const viteDevServerPort = Number(env.FRONTEND_DEV_SERVER_PORT) || 3001;
 const viteDevPortFilePath = join(outDir, '.vite', 'dev-port');
+const viteDevBaseFilePath = join(outDir, '.vite', 'dev-base');
 
-// Write the Vite dev server's actual port to a file so the Go server can discover it for proxying.
+// Write the Vite dev server's actual port and base to files so the Go server can discover them for proxying.
 function viteDevServerPortPlugin(): Plugin {
   return {
     name: 'vite-dev-server-port',
@@ -214,6 +218,7 @@ function viteDevServerPortPlugin(): Plugin {
         if (typeof addr === 'object' && addr) {
           mkdirSync(path.dirname(viteDevPortFilePath), {recursive: true});
           writeFileSync(viteDevPortFilePath, String(addr.port));
+          writeFileSync(viteDevBaseFilePath, server.config.base);
         }
       });
     },

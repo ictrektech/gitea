@@ -1,0 +1,54 @@
+# VOS live debugging for Gitea, driven by docker/vos-dev/vos-dev.sh.
+# Source is mounted read-write; air rebuilds and restarts Gitea, vite serves assets through Gitea.
+services:
+  gitea-dev:
+    build:
+      context: ../..
+      dockerfile: docker/vos-dev/Dockerfile
+    image: gitea-vos-dev:local
+    container_name: gitea-vos-dev
+    working_dir: /src
+    command: ["node", "/src/docker/vos/start.mjs"]
+    environment:
+      VOS_HOST_GW_IP: ${VOS_HOST_GW_IP:-172.17.0.1}
+      VOS_API_GW_PORT_INTERNAL: ${VOS_API_GW_PORT_INTERNAL:-1182}
+      VOS_USERINFO_URL: http://${VOS_HOST_GW_IP:-172.17.0.1}:${VOS_API_GW_PORT_INTERNAL:-1182}/v1000/oauth2/userinfo
+      VOS_USERS_URL: http://${VOS_HOST_GW_IP:-172.17.0.1}:${VOS_API_GW_PORT_INTERNAL:-1182}/v1000/user/list
+      VOS_POSTGRES_PASSWORD: ${VOS_POSTGRES_PASSWORD:?run make vos-dev}
+      VOS_GITEA_COMMAND: air -c .air.toml
+      GITEA_PUBLIC_URL: ${GITEA_PUBLIC_URL:-http://172.17.0.1:1182/app/com.ictrek.gitea/}
+      GITEA_SSH_PORT: ${GITEA_SSH_PORT:-32222}
+      GITEA_STATIC_ROOT_PATH: /src
+      GITEA_RUN_MODE: dev
+      GITEA_I_AM_BEING_UNSAFE_RUNNING_AS_ROOT: "true"
+    ports:
+      - "${VOS_DEV_PORT:-38080}:8080"
+    volumes:
+      - ${GITEA_DEV_SOURCE:?run make vos-dev}:/src
+      - ${GITEA_DEV_CONFIG:?run make vos-dev}:/config
+      - ${GITEA_DEV_DATA:?run make vos-dev}:/data/gitea
+      - ${GITEA_SHARED_REPOS:?run make vos-dev}:/data/git
+      - ${GITEA_DEV_CONTEXT:?run make vos-dev}:/var/lib/vos-context:ro
+      - ${GITEA_DEV_RUN_DIR:?run make vos-dev}:${GITEA_DEV_RUN_DIR:?run make vos-dev}
+      - node-modules:/src/node_modules
+      - air-bin:/opt/air
+      - go-cache:/root/.cache
+      - pnpm-store:/root/.local/share/pnpm
+    networks:
+      vos_default:
+        aliases: [gitea-dev]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 900s
+
+volumes:
+  node-modules:
+  air-bin:
+  go-cache:
+  pnpm-store:
+
+networks:
+  vos_default:
+    external: true

@@ -102,7 +102,12 @@ func (c TemplateContext) AppFullLink(link ...string) template.URL {
 func (c TemplateContext) ScriptImport(path string, typ ...string) template.HTML {
 	if len(typ) > 0 {
 		if typ[0] == "module" {
-			return template.HTML(`<script nonce="` + c.CspScriptNonce() + `" type="module" src="` + html.EscapeString(public.AssetURI(path)) + `"></script>`)
+			hmrClient := ""
+			if uri := public.ViteDevClientURI(); uri != "" {
+				// the module updates come over the dev server's WebSocket, without the client the page would only refresh manually
+				hmrClient = `<script nonce="` + c.CspScriptNonce() + `" type="module" src="` + html.EscapeString(uri) + `"></script>`
+			}
+			return template.HTML(hmrClient + `<script nonce="` + c.CspScriptNonce() + `" type="module" src="` + html.EscapeString(public.AssetURI(path)) + `"></script>`)
 		}
 		panic("unsupported script type: " + typ[0])
 	}

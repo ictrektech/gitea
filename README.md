@@ -55,6 +55,20 @@ Actions 默认开启，Runner 独立安装在构建机。`GITEA_PUBLIC_URL` 决�
 
 VOS 中的 Actions → Runners 会探测同机 GARM。探测成功后可直接打开，也可以填写其他机器上的完整 GARM URL。手填地址只记在当前浏览器。未安装 GARM 时仍可使用原生 Runner 注册、列表和任务调度。
 
+## VOS 联调
+
+`make vos-dev` 用源码挂载启动联调容器，不必构建镜像或重装应用。容器内 `air` 重建 Go 后端，`vite` 经 Gitea 代理提供前端资源，改代码即时生效。脚本从已安装应用读取数据库凭据与仓库目录，再写一条临时 Traefik 路由，把 `/app/com.ictrek.gitea` 指向联调容器；已安装应用保持运行，退出时路由自动删除。
+
+```bash
+make vos-dev          # 前台运行，Ctrl-C 收尾
+make vos-dev-status   # 容器、健康与路由状态
+make vos-dev-down     # 停止容器并撤路由
+```
+
+联调实例在 `~/dev/build/gitea/vos-dev` 保存自己的配置与应用数据，避免与已安装应用争抢队列和索引锁；数据库密码由脚本从已安装容器复制，两者共用同一数据库。裸仓库直接挂载已安装应用的 `git` 目录，因此调试的是真实仓库。需要其他目录时用 `VOS_DEV_CONFIG_DIR`、`VOS_DEV_DATA_DIR`、`VOS_DEV_REPOS_DIR`、`VOS_DEV_PORT` 覆盖。
+
+Go 与模板改动由 `air` 重建；`docker/vos` 下的 Node 脚本改动需重启容器（`docker compose -f docker/vos-dev/docker-compose.yml restart gitea-dev`）。联调容器以 root 运行：源码属主与已安装应用的私有目录属主不同，普通用户无法同时写入两者，因此构建产物可能属于 root。首次启动要构建镜像、安装 `air`、安装前端依赖并编译二进制，耗时数分钟。
+
 ## 构建与验证
 
 Git 操作只在本地执行。先 rsync 当前源码到目标机器的 `~/dev/repos/gitea`，再在机器上执行：

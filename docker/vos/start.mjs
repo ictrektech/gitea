@@ -42,6 +42,7 @@ USE_SUB_URL_PATH = true
 PUBLIC_URL_DETECTION = auto
 LOCAL_ROOT_URL = http://127.0.0.1:3000${BASE}/
 APP_DATA_PATH = /data/gitea
+STATIC_ROOT_PATH = ${process.env.GITEA_STATIC_ROOT_PATH || '/data/gitea'}
 DISABLE_SSH = false
 START_SSH_SERVER = true
 SSH_LISTEN_HOST = 0.0.0.0
@@ -115,7 +116,8 @@ async function publishRunnerToken(password) {
     }
   }
 }
-const child = spawn('/usr/local/bin/gitea', ['web', '--config', '/config/conf/app.ini'], {stdio: 'inherit', env: {...process.env, GITEA_WORK_DIR: '/data/gitea', GITEA_CUSTOM: '/config', VOS_AUTH_ENABLED: 'true'}});
+const [command, ...commandArgs] = (process.env.VOS_GITEA_COMMAND || '/usr/local/bin/gitea web --config /config/conf/app.ini').split(' ').filter(Boolean);
+const child = spawn(command, commandArgs, {stdio: 'inherit', env: {...process.env, GITEA_WORK_DIR: '/data/gitea', GITEA_CUSTOM: '/config', VOS_AUTH_ENABLED: 'true'}});
 const gateway = createGateway({userinfoUrl: process.env.VOS_USERINFO_URL});
 gateway.listen(8080, '0.0.0.0');
 publishRunnerToken(secrets.database);

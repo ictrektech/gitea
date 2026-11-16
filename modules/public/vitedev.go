@@ -20,7 +20,10 @@ import (
 	"gitea.dev/modules/web/routing"
 )
 
-const viteDevPortFile = "public/assets/.vite/dev-port"
+const (
+	viteDevPortFile = "public/assets/.vite/dev-port"
+	viteDevBaseFile = "public/assets/.vite/dev-base"
+)
 
 var viteDevProxy atomic.Pointer[httputil.ReverseProxy]
 
@@ -32,6 +35,17 @@ func getViteDevServerBaseURL() string {
 		return ""
 	}
 	return "http://localhost:" + port
+}
+
+// getViteDevBasePath returns the dev server's base path without the trailing slash, e.g. "/app/foo" or "" for "/".
+// Without the file, assume the site sub path, which is what the dev container passes as "--base".
+func getViteDevBasePath() string {
+	content, err := os.ReadFile(filepath.Join(setting.StaticRootPath, viteDevBaseFile))
+	base := strings.TrimSpace(string(content))
+	if err != nil || !strings.HasPrefix(base, "/") {
+		return setting.AppSubURL
+	}
+	return strings.TrimSuffix(base, "/")
 }
 
 func getViteDevProxy() *httputil.ReverseProxy {
@@ -58,10 +72,14 @@ func getViteDevProxy() *httputil.ReverseProxy {
 		ResponseHeaderTimeout: 5 * time.Second,
 	}
 	log.Info("Proxying Vite dev server requests to %s", target)
+	viteDevBasePath := getViteDevBasePath()
 	proxy := &httputil.ReverseProxy{
 		Transport: transport,
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
+			// the browser requests module URLs with the base path, but the router strips it before this middleware runs
+			r.Out.URL.Path = viteDevBasePath + r.Out.URL.Path
+			r.Out.URL.RawPath = ""
 			r.Out.Host = target.Host
 		},
 		ModifyResponse: func(resp *http.Response) error {
@@ -138,6 +156,15 @@ func IsViteDevMode() bool {
 		time:  now,
 	})
 	return isDev
+}
+
+// ViteDevClientURI returns the URL of the HMR client served by the dev server, or "" if it isn't running.
+// Vite injects the client only into HTML pages it serves itself, so a page rendered by Gitea must load it.
+func ViteDevClientURI() string {
+	if !IsViteDevMode() {
+		return ""
+	}
+	return setting.AppSubURL + "/@vite/client"
 }
 
 // viteDevSourceURL returns the dev server URL for a source file, or "" if it doesn't exist.
